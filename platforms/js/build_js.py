@@ -85,7 +85,6 @@ class Builder:
                "-DCV_TRACE=OFF",
                "-DBUILD_SHARED_LIBS=OFF",
                "-DWITH_1394=OFF",
-               "-DWITH_ADE=OFF",
                "-DWITH_VTK=OFF",
                "-DWITH_EIGEN=OFF",
                "-DWITH_FFMPEG=OFF",
@@ -113,13 +112,13 @@ class Builder:
                "-DWITH_GPHOTO2=OFF",
                "-DWITH_LAPACK=OFF",
                "-DWITH_ITT=OFF",
+               "-DWITH_QUIRC=OFF",
                "-DBUILD_ZLIB=ON",
                "-DBUILD_opencv_apps=OFF",
-               "-DBUILD_opencv_calib3d=ON",  # No bindings provided. This module is used as a dependency for other modules.
+               "-DBUILD_opencv_calib3d=ON",
                "-DBUILD_opencv_dnn=ON",
                "-DBUILD_opencv_features2d=ON",
-               "-DBUILD_opencv_flann=ON",  # No bindings provided. This module is used as a dependency for other modules.
-               "-DBUILD_opencv_gapi=OFF",
+               "-DBUILD_opencv_flann=OFF",
                "-DBUILD_opencv_ml=OFF",
                "-DBUILD_opencv_photo=OFF",
                "-DBUILD_opencv_imgcodecs=OFF",
@@ -130,13 +129,17 @@ class Builder:
                "-DBUILD_opencv_superres=OFF",
                "-DBUILD_opencv_stitching=OFF",
                "-DBUILD_opencv_java=OFF",
+               "-DBUILD_opencv_java_bindings_generator=OFF",
                "-DBUILD_opencv_js=ON",
                "-DBUILD_opencv_python2=OFF",
                "-DBUILD_opencv_python3=OFF",
+               "-DBUILD_opencv_python_bindings_generator=OFF",
                "-DBUILD_EXAMPLES=OFF",
                "-DBUILD_PACKAGE=OFF",
                "-DBUILD_TESTS=OFF",
                "-DBUILD_PERF_TESTS=OFF"]
+        if self.options.cmake_option:
+            cmd += args.cmake_option
         if self.options.build_doc:
             cmd.append("-DBUILD_DOCS=ON")
         else:
@@ -193,10 +196,16 @@ if __name__ == "__main__":
     parser.add_argument('--skip_config', action="store_true", help="Skip cmake config")
     parser.add_argument('--config_only', action="store_true", help="Only do cmake config")
     parser.add_argument('--enable_exception', action="store_true", help="Enable exception handling")
-    args = parser.parse_args()
+    parser.add_argument('--cmake_option', action='append', help="Adds the ability to modify the list of modules")
+    parser.add_argument('--modul_option', help="Adds the ability to modify the list of modules") # change argument name
 
+    args = parser.parse_args()
     log.basicConfig(format='%(message)s', level=log.DEBUG)
     log.debug("Args: %s", args)
+
+    if args.modul_option:
+        os.environ["CWhiteList"] = args.modul_option
+        print( os.environ["CWhiteList"])
 
     if args.emscripten_dir is None:
         log.info("Cannot get Emscripten path, please specify it either by EMSCRIPTEN environment variable or --emscripten_dir option.")
