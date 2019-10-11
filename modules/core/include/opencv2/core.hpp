@@ -68,13 +68,17 @@
         @defgroup core_c_glue Connections with C++
     @}
     @defgroup core_array Operations on arrays
+    @defgroup core_async Asynchronous API
     @defgroup core_xml XML/YAML Persistence
     @defgroup core_cluster Clustering
     @defgroup core_utils Utility and system functions and macros
     @{
+        @defgroup core_logging Logging facilities
         @defgroup core_utils_sse SSE utilities
         @defgroup core_utils_neon NEON utilities
+        @defgroup core_utils_vsx VSX utilities
         @defgroup core_utils_softfloat Softfloat support
+        @defgroup core_utils_samples Utility functions for OpenCV samples
     @}
     @defgroup core_opengl OpenGL interoperability
     @defgroup core_ipp Intel IPP Asynchronous C/C++ Converters
@@ -91,6 +95,7 @@
         @{
             @defgroup core_hal_intrin_impl Private implementation helpers
         @}
+        @defgroup core_lowlevel_api Low-level API for external libraries / plugins
     @}
 @}
  */
@@ -289,9 +294,9 @@ if src was not a ROI, use borderType | #BORDER_ISOLATED.
 @param src Source image.
 @param dst Destination image of the same type as src and the size Size(src.cols+left+right,
 src.rows+top+bottom) .
-@param top
-@param bottom
-@param left
+@param top the top pixels
+@param bottom the bottom pixels
+@param left the left pixels
 @param right Parameter specifying how many pixels in each direction from the source image rectangle
 to extrapolate. For example, top=1, bottom=1, left=1, right=1 mean that 1 pixel-wide border needs
 to be built.
@@ -1497,7 +1502,7 @@ converts denormalized values to zeros on output. Special values (NaN,
 Inf) are not handled.
 @param src input array.
 @param dst output array of the same size and type as src.
-@sa log , cartToPolar , polarToCart , phase , pow , sqrt , magnitude
+@sa log , cartToPolar , polarToCart , phase , pow , sqrt , magnitude , magnitudeSqr
 */
 CV_EXPORTS_W void exp(InputArray src, OutputArray dst);
 
@@ -1510,7 +1515,7 @@ Output on zero, negative and special (NaN, Inf) values is undefined.
 
 @param src input array.
 @param dst output array of the same size and type as src .
-@sa exp, cartToPolar, polarToCart, phase, pow, sqrt, magnitude
+@sa exp, cartToPolar, polarToCart, phase, pow, sqrt, magnitude, magnitudeSqr
 */
 CV_EXPORTS_W void log(InputArray src, OutputArray dst);
 
@@ -1532,7 +1537,7 @@ size and type as angle.
 size and type as angle.
 @param angleInDegrees when true, the input angles are measured in
 degrees, otherwise, they are measured in radians.
-@sa cartToPolar, magnitude, phase, exp, log, pow, sqrt
+@sa cartToPolar, magnitude, magnitudeSqr, phase, exp, log, pow, sqrt
 */
 CV_EXPORTS_W void polarToCart(InputArray magnitude, InputArray angle,
                               OutputArray x, OutputArray y, bool angleInDegrees = false);
@@ -1590,6 +1595,19 @@ have the same size as x.
 @sa cartToPolar, polarToCart, phase, sqrt
 */
 CV_EXPORTS_W void magnitude(InputArray x, InputArray y, OutputArray magnitude);
+
+/** @brief Calculates the squared magnitude of 2D vectors.
+
+The function cv::magnitudeSqr calculates the squared magnitude of 2D vectors formed
+from the corresponding elements of x and y arrays:
+\f[\texttt{dst} (I) =  \texttt{x}(I)^2 + \texttt{y}(I)^2\f]
+@param x floating-point array of x-coordinates of the vectors.
+@param y floating-point array of y-coordinates of the vectors; it must
+have the same size as x.
+@param magnitude output array of the same size and type as x.
+@sa cartToPolar, polarToCart, phase, sqrt
+*/
+CV_EXPORTS_W void magnitudeSqr(InputArray x, InputArray y, OutputArray magnitude);
 
 /** @brief Checks every element of an input array for invalid values.
 
@@ -2150,7 +2168,7 @@ output array (#DFT_INVERSE is set) contain non-zeros, thus, the function can han
 rows more efficiently and save some time; this technique is very useful for calculating array
 cross-correlation or convolution using DFT.
 @sa dct , getOptimalDFTSize , mulSpectrums, filter2D , matchTemplate , flip , cartToPolar ,
-magnitude , phase
+magnitude , magnitudeSqr phase
 */
 CV_EXPORTS_W void dft(InputArray src, OutputArray dst, int flags = 0, int nonzeroRows = 0);
 
