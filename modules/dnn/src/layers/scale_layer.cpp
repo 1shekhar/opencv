@@ -13,6 +13,8 @@ Implementation of Scale layer.
 #include "layers_common.hpp"
 #include "../op_halide.hpp"
 #include "../op_inf_engine.hpp"
+#include "../ie_ngraph.hpp"
+
 #include <opencv2/dnn/shape_utils.hpp>
 
 namespace cv
@@ -45,13 +47,13 @@ public:
         std::vector<Mat> inputs;
         inputs_arr.getMatVector(inputs);
         hasWeights = blobs.size() == 2 || (blobs.size() == 1 && !hasBias);
-        CV_Assert(inputs.size() == 2 && blobs.empty() || blobs.size() == (int)hasWeights + (int)hasBias);
+        CV_Assert((inputs.size() == 2 && blobs.empty()) || blobs.size() == (int)hasWeights + (int)hasBias);
     }
 
     virtual bool supportBackend(int backendId) CV_OVERRIDE
     {
         return backendId == DNN_BACKEND_OPENCV || backendId == DNN_BACKEND_HALIDE ||
-               backendId == DNN_BACKEND_INFERENCE_ENGINE && axis == 1;
+               ((backendId == DNN_BACKEND_INFERENCE_ENGINE || backendId == DNN_BACKEND_NGRAPH) && axis == 1);
     }
 
     void forward(InputArrayOfArrays inputs_arr, OutputArrayOfArrays outputs_arr, OutputArrayOfArrays internals_arr) CV_OVERRIDE
@@ -194,38 +196,68 @@ public:
     }
 #endif  // HAVE_HALIDE
 
+#ifdef HAVE_INF_ENGINE
     virtual Ptr<BackendNode> initInfEngine(const std::vector<Ptr<BackendWrapper> >&) CV_OVERRIDE
     {
-#ifdef HAVE_INF_ENGINE
-        InferenceEngine::LayerParams lp;
-        lp.name = name;
-        lp.type = "ScaleShift";
-        lp.precision = InferenceEngine::Precision::FP32;
-        std::shared_ptr<InferenceEngine::ScaleShiftLayer> ieLayer(new InferenceEngine::ScaleShiftLayer(lp));
+        InferenceEngine::Builder::Layer l = InferenceEngine::Builder::ScaleShiftLayer(name);
 
         CV_Assert(!blobs.empty());
         const size_t numChannels = blobs[0].total();
         if (hasWeights)
         {
-            ieLayer->_weights = wrapToInfEngineBlob(blobs[0], {numChannels}, InferenceEngine::Layout::C);
+            addConstantData("weights", wrapToInfEngineBlob(blobs[0], {numChannels}, InferenceEngine::Layout::C), l);
         }
         else
         {
-            auto weights = InferenceEngine::make_shared_blob<float>(InferenceEngine::Precision::FP32,
-                                                                    {numChannels});
+            auto weights = InferenceEngine::make_shared_blob<float>({
+                               InferenceEngine::Precision::FP32, {(size_t)numChannels},
+                               InferenceEngine::Layout::C
+                           });
             weights->allocate();
-
-            std::vector<float> ones(numChannels, 1);
-            weights->set(ones);
-            ieLayer->_weights = weights;
+            float* buf = weights->buffer().as<float*>();
+            std::fill(buf, buf + numChannels, 1);
+            addConstantData("weights", weights, l);
         }
         if (hasBias)
-            ieLayer->_biases = wrapToInfEngineBlob(blobs.back(), {numChannels}, InferenceEngine::Layout::C);
-
-        return Ptr<BackendNode>(new InfEngineBackendNode(ieLayer));
-#endif  // HAVE_INF_ENGINE
-        return Ptr<BackendNode>();
+            addConstantData("biases", wrapToInfEngineBlob(blobs.back(), {numChannels}, InferenceEngine::Layout::C), l);
+        return Ptr<BackendNode>(new InfEngineBackendNode(l));
     }
+#endif  // HAVE_INF_ENGINE
+
+
+#ifdef HAVE_INF_ENGINE
+    virtual Ptr<BackendNode> initNgraph(const std::vector<Ptr<BackendWrapper> >& inputs, const std::vector<Ptr<BackendNode> >& nodes) CV_OVERRIDE
+    {
+        CV_Assert(!blobs.empty());
+        const size_t numChannels = blobs[0].total();
+        auto ieInpNode = nodes[0].dynamicCast<InfEngineNgraphNode>()->node;
+
+        auto weight = hasWeights ?
+                      std::make_shared<ngraph::op::Constant>(ngraph::element::f32,
+                                                             ngraph::Shape({numChannels}), blobs[0].data) :
+                      std::make_shared<ngraph::op::Constant>(ngraph::element::f32,
+                                                             ngraph::Shape({numChannels}), std::vector<float>(numChannels, 1).data());
+
+        auto bias   = hasBias ?
+                      std::make_shared<ngraph::op::Constant>(ngraph::element::f32,
+                                                             ngraph::Shape({numChannels}), blobs.back().data) :
+                      std::make_shared<ngraph::op::Constant>(ngraph::element::f32,
+                                                             ngraph::Shape({numChannels}), std::vector<float>(numChannels, 0).data());
+
+        std::vector<int64_t> axis(ieInpNode->get_shape().size() - 1, 0);
+        std::iota(axis.begin() + 1, axis.end(), 2);
+
+        std::vector<int64_t> shape_data(ieInpNode->get_shape().begin(), ieInpNode->get_shape().end());
+        auto axes   = std::make_shared<ngraph::op::Constant>(ngraph::element::i64, ngraph::Shape({axis.size()}), axis.data());
+        auto shapes = std::make_shared<ngraph::op::Constant>(ngraph::element::i64, ngraph::Shape({shape_data.size()}), shape_data.data());
+        auto shift  = std::make_shared<ngraph::op::DynBroadcast>(bias, shapes, axes);
+        auto scale  = std::make_shared<ngraph::op::DynBroadcast>(weight, shapes, axes);
+
+        auto scale_node = std::make_shared<ngraph::op::Multiply>(ieInpNode, scale);
+        auto scale_shift = std::make_shared<ngraph::op::Add>(scale_node, shift);
+        return Ptr<BackendNode>(new InfEngineNgraphNode(scale_shift));
+    }
+#endif  // HAVE_INF_ENGINE
 
     void getScaleShift(Mat& scale, Mat& shift) const CV_OVERRIDE
     {

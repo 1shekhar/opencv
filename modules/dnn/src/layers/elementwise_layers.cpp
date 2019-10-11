@@ -44,7 +44,9 @@
 #include "layers_common.hpp"
 #include "../op_halide.hpp"
 #include "../op_inf_engine.hpp"
-#include "../op_vkcom.hpp"
+
+#include "../ie_ngraph.hpp"
+
 #include <opencv2/dnn/shape_utils.hpp>
 #include <iostream>
 
@@ -150,24 +152,23 @@ public:
         return Ptr<BackendNode>();
     }
 
+#ifdef HAVE_INF_ENGINE
     virtual Ptr<BackendNode> initInfEngine(const std::vector<Ptr<BackendWrapper> >&) CV_OVERRIDE
     {
-#ifdef HAVE_INF_ENGINE
-        InferenceEngine::LayerParams lp;
-        lp.name = this->name;
-        lp.precision = InferenceEngine::Precision::FP32;
-        return Ptr<BackendNode>(new InfEngineBackendNode(func.initInfEngine(lp)));
+        InferenceEngine::Builder::Layer ieLayer = func.initInfEngineBuilderAPI();
+        ieLayer.setName(this->name);
+        return Ptr<BackendNode>(new InfEngineBackendNode(ieLayer));
+    }
 #endif  // HAVE_INF_ENGINE
-        return Ptr<BackendNode>();
-    }
 
-    virtual Ptr<BackendNode> initVkCom(const std::vector<Ptr<BackendWrapper> >& inputs) CV_OVERRIDE
+#ifdef HAVE_INF_ENGINE
+    virtual Ptr<BackendNode> initNgraph(const std::vector<Ptr<BackendWrapper> >& inputs, const std::vector<Ptr<BackendNode> >& nodes) CV_OVERRIDE
     {
-#ifdef HAVE_VULKAN
-        return Ptr<BackendNode>(new VkComBackendNode(inputs, func.initVkCom()));
-#endif  // HAVE_VULKAN
-        return Ptr<BackendNode>();
+        auto& ieInpNode = nodes[0].dynamicCast<InfEngineNgraphNode>()->node;
+        auto node = func.initNgraphAPI(ieInpNode);
+        return Ptr<BackendNode>(new InfEngineNgraphNode(node));
     }
+#endif  // HAVE_INF_ENGINE
 
     virtual bool tryFuse(Ptr<dnn::Layer>& top) CV_OVERRIDE
     {
@@ -259,9 +260,13 @@ struct ReLUFunctor
 
     bool supportBackend(int backendId, int)
     {
-        return backendId == DNN_BACKEND_OPENCV || backendId == DNN_BACKEND_HALIDE ||
-               backendId == DNN_BACKEND_INFERENCE_ENGINE ||
-               backendId == DNN_BACKEND_VKCOM;
+#ifdef HAVE_INF_ENGINE
+        if (backendId == DNN_BACKEND_INFERENCE_ENGINE)
+            return slope >= 0 || !INF_ENGINE_VER_MAJOR_EQ(INF_ENGINE_RELEASE_2019R1);
+        if (backendId == DNN_BACKEND_NGRAPH)
+            return true;
+#endif
+        return backendId == DNN_BACKEND_OPENCV || backendId == DNN_BACKEND_HALIDE;
     }
 
     void apply(const float* srcptr, float* dstptr, int len, size_t planeSize, int cn0, int cn1) const
@@ -355,25 +360,23 @@ struct ReLUFunctor
 #endif  // HAVE_HALIDE
 
 #ifdef HAVE_INF_ENGINE
-    InferenceEngine::CNNLayerPtr initInfEngine(InferenceEngine::LayerParams& lp)
+    InferenceEngine::Builder::Layer initInfEngineBuilderAPI()
     {
-        lp.type = "ReLU";
-        std::shared_ptr<InferenceEngine::ReLULayer> ieLayer(new InferenceEngine::ReLULayer(lp));
-        ieLayer->negative_slope = slope;
-        ieLayer->params["negative_slope"] = format("%f", slope);
-        return ieLayer;
+        return InferenceEngine::Builder::ReLULayer("").setNegativeSlope(slope);
     }
 #endif  // HAVE_INF_ENGINE
 
-#ifdef HAVE_VULKAN
-    std::shared_ptr<vkcom::OpBase> initVkCom()
+#ifdef HAVE_INF_ENGINE
+    std::shared_ptr<ngraph::Node> initNgraphAPI(const std::shared_ptr<ngraph::Node>& node)
     {
-        std::shared_ptr<vkcom::OpBase> op(new vkcom::OpReLU(slope));
-        return op;
+        if (slope) {
+            auto slope_ = std::make_shared<ngraph::op::Constant>(
+                                ngraph::element::f32, ngraph::Shape({1}), &slope);
+            return std::make_shared<ngraph::op::PRelu>(node, slope_);
+        }
+        return std::make_shared<ngraph::op::Relu>(node);
     }
-#endif  // HAVE_VULKAN
-
-
+#endif  // HAVE_INF_ENGINE
 
     bool tryFuse(Ptr<dnn::Layer>&) { return false; }
 
@@ -396,7 +399,7 @@ struct ReLU6Functor
     bool supportBackend(int backendId, int)
     {
         return backendId == DNN_BACKEND_OPENCV || backendId == DNN_BACKEND_HALIDE ||
-               backendId == DNN_BACKEND_INFERENCE_ENGINE;
+               backendId == DNN_BACKEND_INFERENCE_ENGINE || backendId == DNN_BACKEND_NGRAPH;
     }
 
     void apply(const float* srcptr, float* dstptr, int len, size_t planeSize, int cn0, int cn1) const
@@ -472,25 +475,18 @@ struct ReLU6Functor
 #endif  // HAVE_HALIDE
 
 #ifdef HAVE_INF_ENGINE
-    InferenceEngine::CNNLayerPtr initInfEngine(InferenceEngine::LayerParams& lp)
+    InferenceEngine::Builder::Layer initInfEngineBuilderAPI()
     {
-        lp.type = "Clamp";
-        std::shared_ptr<InferenceEngine::ClampLayer> ieLayer(new InferenceEngine::ClampLayer(lp));
-        ieLayer->min_value = minValue;
-        ieLayer->max_value = maxValue;
-        ieLayer->params["min"] = format("%f", minValue);
-        ieLayer->params["max"] = format("%f", maxValue);
-        return ieLayer;
+        return InferenceEngine::Builder::ClampLayer("").setMinValue(minValue).setMaxValue(maxValue);
     }
 #endif  // HAVE_INF_ENGINE
 
-#ifdef HAVE_VULKAN
-    std::shared_ptr<vkcom::OpBase> initVkCom()
+#ifdef HAVE_INF_ENGINE
+    std::shared_ptr<ngraph::Node> initNgraphAPI(const std::shared_ptr<ngraph::Node>& node)
     {
-        // TODO: add vkcom implementation
-        return std::shared_ptr<vkcom::OpBase>();
+        return std::make_shared<ngraph::op::Clamp>(node, minValue, maxValue);
     }
-#endif  // HAVE_VULKAN
+#endif  // HAVE_INF_ENGINE
 
     bool tryFuse(Ptr<dnn::Layer>&) { return false; }
 
@@ -506,7 +502,7 @@ struct TanHFunctor
     bool supportBackend(int backendId, int)
     {
         return backendId == DNN_BACKEND_OPENCV || backendId == DNN_BACKEND_HALIDE ||
-               backendId == DNN_BACKEND_INFERENCE_ENGINE;
+               backendId == DNN_BACKEND_INFERENCE_ENGINE || backendId == DNN_BACKEND_NGRAPH;
     }
 
     void apply(const float* srcptr, float* dstptr, int len, size_t planeSize, int cn0, int cn1) const
@@ -558,21 +554,18 @@ struct TanHFunctor
 #endif  // HAVE_HALIDE
 
 #ifdef HAVE_INF_ENGINE
-    InferenceEngine::CNNLayerPtr initInfEngine(InferenceEngine::LayerParams& lp)
+    InferenceEngine::Builder::Layer initInfEngineBuilderAPI()
     {
-        lp.type = "TanH";
-        std::shared_ptr<InferenceEngine::CNNLayer> ieLayer(new InferenceEngine::CNNLayer(lp));
-        return ieLayer;
+        return InferenceEngine::Builder::TanHLayer("");
     }
 #endif  // HAVE_INF_ENGINE
 
-#ifdef HAVE_VULKAN
-    std::shared_ptr<vkcom::OpBase> initVkCom()
+#ifdef HAVE_INF_ENGINE
+    std::shared_ptr<ngraph::Node> initNgraphAPI(const std::shared_ptr<ngraph::Node>& node)
     {
-        // TODO: add vkcom implementation
-        return std::shared_ptr<vkcom::OpBase>();
+        return std::make_shared<ngraph::op::Tanh>(node);
     }
-#endif  // HAVE_VULKAN
+#endif  // HAVE_INF_ENGINE
 
     bool tryFuse(Ptr<dnn::Layer>&) { return false; }
 
@@ -588,7 +581,7 @@ struct SigmoidFunctor
     bool supportBackend(int backendId, int)
     {
         return backendId == DNN_BACKEND_OPENCV || backendId == DNN_BACKEND_HALIDE ||
-               backendId == DNN_BACKEND_INFERENCE_ENGINE;
+               backendId == DNN_BACKEND_INFERENCE_ENGINE ||  backendId == DNN_BACKEND_NGRAPH;
     }
 
     void apply(const float* srcptr, float* dstptr, int len, size_t planeSize, int cn0, int cn1) const
@@ -640,21 +633,18 @@ struct SigmoidFunctor
 #endif  // HAVE_HALIDE
 
 #ifdef HAVE_INF_ENGINE
-    InferenceEngine::CNNLayerPtr initInfEngine(InferenceEngine::LayerParams& lp)
+    InferenceEngine::Builder::Layer initInfEngineBuilderAPI()
     {
-        lp.type = "Sigmoid";
-        std::shared_ptr<InferenceEngine::CNNLayer> ieLayer(new InferenceEngine::CNNLayer(lp));
-        return ieLayer;
+        return InferenceEngine::Builder::SigmoidLayer("");
     }
 #endif  // HAVE_INF_ENGINE
 
-#ifdef HAVE_VULKAN
-    std::shared_ptr<vkcom::OpBase> initVkCom()
+#ifdef HAVE_INF_ENGINE
+    std::shared_ptr<ngraph::Node> initNgraphAPI(const std::shared_ptr<ngraph::Node>& node)
     {
-        // TODO: add vkcom implementation
-        return std::shared_ptr<vkcom::OpBase>();
+        return std::make_shared<ngraph::op::Sigmoid>(node);
     }
-#endif  // HAVE_VULKAN
+#endif  // HAVE_INF_ENGINE
 
     bool tryFuse(Ptr<dnn::Layer>&) { return false; }
 
@@ -724,20 +714,18 @@ struct ELUFunctor
 #endif  // HAVE_HALIDE
 
 #ifdef HAVE_INF_ENGINE
-    InferenceEngine::CNNLayerPtr initInfEngine(InferenceEngine::LayerParams& lp)
+    InferenceEngine::Builder::Layer initInfEngineBuilderAPI()
     {
-        lp.type = "ELU";
-        return InferenceEngine::CNNLayerPtr(new InferenceEngine::CNNLayer(lp));
+        return InferenceEngine::Builder::ELULayer("");
     }
 #endif  // HAVE_INF_ENGINE
 
-#ifdef HAVE_VULKAN
-    std::shared_ptr<vkcom::OpBase> initVkCom()
+#ifdef HAVE_INF_ENGINE
+    std::shared_ptr<ngraph::Node> initNgraphAPI(const std::shared_ptr<ngraph::Node>& node)
     {
-        // TODO: add vkcom implementation
-        return std::shared_ptr<vkcom::OpBase>();
+        return std::make_shared<ngraph::op::Elu>(node, 1.0);
     }
-#endif  // HAVE_VULKAN
+#endif  // HAVE_INF_ENGINE
 
     bool tryFuse(Ptr<dnn::Layer>&) { return false; }
 
@@ -752,6 +740,10 @@ struct AbsValFunctor
 
     bool supportBackend(int backendId, int)
     {
+#ifdef HAVE_INF_ENGINE
+        if (backendId == DNN_BACKEND_INFERENCE_ENGINE || backendId == DNN_BACKEND_NGRAPH)
+            return !INF_ENGINE_VER_MAJOR_EQ(INF_ENGINE_RELEASE_2019R1);
+#endif
         return backendId == DNN_BACKEND_OPENCV || backendId == DNN_BACKEND_HALIDE;
     }
 
@@ -804,20 +796,20 @@ struct AbsValFunctor
 #endif  // HAVE_HALIDE
 
 #ifdef HAVE_INF_ENGINE
-    InferenceEngine::CNNLayerPtr initInfEngine(InferenceEngine::LayerParams& lp)
+    InferenceEngine::Builder::Layer initInfEngineBuilderAPI()
     {
-        CV_Error(Error::StsNotImplemented, "Abs");
-        return InferenceEngine::CNNLayerPtr();
+        return InferenceEngine::Builder::ReLULayer("").setNegativeSlope(-0.999999f);
     }
 #endif  // HAVE_INF_ENGINE
 
-#ifdef HAVE_VULKAN
-    std::shared_ptr<vkcom::OpBase> initVkCom()
+#ifdef HAVE_INF_ENGINE
+    std::shared_ptr<ngraph::Node> initNgraphAPI(const std::shared_ptr<ngraph::Node>& node)
     {
-        // TODO: add vkcom implementation
-        return std::shared_ptr<vkcom::OpBase>();
+        float coeff = -0.999999f;
+        auto slope = std::make_shared<ngraph::op::Constant>(ngraph::element::f32, ngraph::Shape({1}), &coeff);
+        return std::make_shared<ngraph::op::PRelu>(node, slope);
     }
-#endif  // HAVE_VULKAN
+#endif  // HAVE_INF_ENGINE
 
     bool tryFuse(Ptr<dnn::Layer>&) { return false; }
 
@@ -842,7 +834,8 @@ struct BNLLFunctor
             for( int i = 0; i < len; i++ )
             {
                 float x = srcptr[i];
-                dstptr[i] = log(1.f + exp(-abs(x)));
+                // https://github.com/BVLC/caffe/blame/1.0/src/caffe/layers/bnll_layer.cpp#L17
+                dstptr[i] = x > 0 ? x + log(1. + exp(-x)) : log(1. + exp(x));
             }
         }
     }
@@ -850,8 +843,28 @@ struct BNLLFunctor
 #ifdef HAVE_OPENCL
     bool applyOCL(InputArrayOfArrays inps, OutputArrayOfArrays outs, OutputArrayOfArrays internals)
     {
-        // TODO: implement OCL version
-        return false;
+        std::vector<UMat> inputs;
+        std::vector<UMat> outputs;
+
+        inps.getUMatVector(inputs);
+        outs.getUMatVector(outputs);
+        String buildopt = oclGetTMacro(inputs[0]);
+
+        for (size_t i = 0; i < inputs.size(); i++)
+        {
+            UMat& src = inputs[i];
+            UMat& dst = outputs[i];
+
+            ocl::Kernel kernel("BNLLForward", ocl::dnn::activations_oclsrc, buildopt);
+            kernel.set(0, (int)src.total());
+            kernel.set(1, ocl::KernelArg::PtrReadOnly(src));
+            kernel.set(2, ocl::KernelArg::PtrWriteOnly(dst));
+
+            size_t gSize = src.total();
+            CV_Assert(kernel.run(1, &gSize, NULL, false));
+        }
+
+        return true;
     }
 #endif
 
@@ -859,25 +872,24 @@ struct BNLLFunctor
     void attachHalide(const Halide::Expr& input, Halide::Func& top)
     {
         Halide::Var x("x"), y("y"), c("c"), n("n");
-        top(x, y, c, n) = log(1.0f + exp(-abs(input)));
+        // https://github.com/BVLC/caffe/blame/1.0/src/caffe/layers/bnll_layer.cpp#L17
+        top(x, y, c, n) = max(input, 0) + log(1.0f + exp(-abs(input)));
     }
 #endif  // HAVE_HALIDE
 
 #ifdef HAVE_INF_ENGINE
-    InferenceEngine::CNNLayerPtr initInfEngine(InferenceEngine::LayerParams& lp)
+    InferenceEngine::Builder::Layer initInfEngineBuilderAPI()
     {
-        CV_Error(Error::StsNotImplemented, "BNLL");
-        return InferenceEngine::CNNLayerPtr();
+        CV_Error(Error::StsNotImplemented, "");
     }
 #endif  // HAVE_INF_ENGINE
 
-#ifdef HAVE_VULKAN
-    std::shared_ptr<vkcom::OpBase> initVkCom()
+#ifdef HAVE_INF_ENGINE
+    std::shared_ptr<ngraph::Node> initNgraphAPI(const std::shared_ptr<ngraph::Node>& node)
     {
-        // TODO: add vkcom implementation
-        return std::shared_ptr<vkcom::OpBase>();
+        CV_Error(Error::StsNotImplemented, "");
     }
-#endif  // HAVE_VULKAN
+#endif  // HAVE_INF_ENGINE
 
     bool tryFuse(Ptr<dnn::Layer>&) { return false; }
 
@@ -900,9 +912,9 @@ struct PowerFunctor
     bool supportBackend(int backendId, int targetId)
     {
         if (backendId == DNN_BACKEND_INFERENCE_ENGINE)
-            return (targetId != DNN_TARGET_OPENCL && targetId != DNN_TARGET_OPENCL_FP16) || power == 1.0;
+            return (targetId != DNN_TARGET_OPENCL && targetId != DNN_TARGET_OPENCL_FP16) || power == 1.0 || power == 0.5;
         else
-            return backendId == DNN_BACKEND_OPENCV || backendId == DNN_BACKEND_HALIDE;
+            return backendId == DNN_BACKEND_OPENCV || backendId == DNN_BACKEND_HALIDE || backendId == DNN_BACKEND_NGRAPH;
     }
 
     void apply(const float* srcptr, float* dstptr, int len, size_t planeSize, int cn0, int cn1) const
@@ -981,34 +993,39 @@ struct PowerFunctor
 #endif  // HAVE_HALIDE
 
 #ifdef HAVE_INF_ENGINE
-    InferenceEngine::CNNLayerPtr initInfEngine(InferenceEngine::LayerParams& lp)
+    InferenceEngine::Builder::Layer initInfEngineBuilderAPI()
     {
-        if (power == 1.0f && scale == 1.0f && shift == 0.0f)
-        {
-            // It looks like there is a bug in Inference Engine for DNN_TARGET_OPENCL and DNN_TARGET_OPENCL_FP16
-            // if power layer do nothing so we replace it to Identity.
-            lp.type = "Split";
-            return std::shared_ptr<InferenceEngine::SplitLayer>(new InferenceEngine::SplitLayer(lp));
-        }
-        else
-        {
-            lp.type = "Power";
-            std::shared_ptr<InferenceEngine::PowerLayer> ieLayer(new InferenceEngine::PowerLayer(lp));
-            ieLayer->power = power;
-            ieLayer->scale = scale;
-            ieLayer->offset = shift;
-            return ieLayer;
-        }
+        return InferenceEngine::Builder::PowerLayer("").setPower(power)
+                                                       .setScale(scale)
+                                                       .setShift(shift);
     }
 #endif  // HAVE_INF_ENGINE
 
-#ifdef HAVE_VULKAN
-    std::shared_ptr<vkcom::OpBase> initVkCom()
+#ifdef HAVE_INF_ENGINE
+    std::shared_ptr<ngraph::Node> initNgraphAPI(const std::shared_ptr<ngraph::Node>& node)
     {
-        // TODO: add vkcom implementation
-        return std::shared_ptr<vkcom::OpBase>();
+        auto scale_node = std::make_shared<ngraph::op::Constant>(ngraph::element::f32,
+                          ngraph::Shape{1}, &scale);
+
+        auto shift_node = std::make_shared<ngraph::op::Constant>(ngraph::element::f32,
+                          ngraph::Shape{1}, &shift);
+
+        auto power_node = std::make_shared<ngraph::op::Constant>(ngraph::element::f32,
+                                     ngraph::Shape{1}, &power);
+
+        std::vector<int64_t> axis(node->get_shape().size());
+        std::iota(axis.begin(), axis.end(), 1);
+        auto axes = std::make_shared<ngraph::op::Constant>(ngraph::element::i64,
+                    ngraph::Shape({axis.size()}), axis.data());
+        auto shapes = std::make_shared<ngraph::op::Constant>(ngraph::element::i64,
+                      ngraph::Shape({node->get_shape().size()}), node->get_shape().data());
+        auto new_power = std::make_shared<ngraph::op::DynBroadcast>(power_node, shapes, axes);
+
+        auto mul = std::make_shared<ngraph::op::Multiply>(scale_node, node, ngraph::op::AutoBroadcastType::NUMPY);
+        auto scale_shift = std::make_shared<ngraph::op::Add>(mul, shift_node, ngraph::op::AutoBroadcastType::NUMPY);
+        return std::make_shared<ngraph::op::Power>(scale_shift, new_power);
     }
-#endif  // HAVE_VULKAN
+#endif  // HAVE_INF_ENGINE
 
     bool tryFuse(Ptr<dnn::Layer>& top)
     {
@@ -1054,7 +1071,8 @@ struct ChannelsPReLUFunctor
 
     bool supportBackend(int backendId, int)
     {
-        return backendId == DNN_BACKEND_OPENCV || backendId == DNN_BACKEND_HALIDE;
+        return backendId == DNN_BACKEND_OPENCV || backendId == DNN_BACKEND_HALIDE ||
+               backendId == DNN_BACKEND_INFERENCE_ENGINE || backendId == DNN_BACKEND_NGRAPH;
     }
 
     void apply(const float* srcptr, float* dstptr, int len, size_t planeSize, int cn0, int cn1) const
@@ -1138,20 +1156,25 @@ struct ChannelsPReLUFunctor
 #endif  // HAVE_HALIDE
 
 #ifdef HAVE_INF_ENGINE
-    InferenceEngine::CNNLayerPtr initInfEngine(InferenceEngine::LayerParams& lp)
+    InferenceEngine::Builder::Layer initInfEngineBuilderAPI()
     {
-        CV_Error(Error::StsNotImplemented, "PReLU");
-        return InferenceEngine::CNNLayerPtr();
+        InferenceEngine::Builder::Layer l = InferenceEngine::Builder::PReLULayer("");
+        const size_t numChannels = scale.total();
+        addConstantData("weights", wrapToInfEngineBlob(scale, {numChannels}, InferenceEngine::Layout::C), l);
+        return l;
     }
 #endif  // HAVE_INF_ENGINE
 
-#ifdef HAVE_VULKAN
-    std::shared_ptr<vkcom::OpBase> initVkCom()
+#ifdef HAVE_INF_ENGINE
+    std::shared_ptr<ngraph::Node> initNgraphAPI(const std::shared_ptr<ngraph::Node>& node)
     {
-        // TODO: add vkcom implementation
-        return std::shared_ptr<vkcom::OpBase>();
+        const size_t numChannels = scale.total();
+        auto type = scale.type() == CV_32F ? ngraph::element::f32 : ngraph::element::f16;
+        auto slope = std::make_shared<ngraph::op::Constant>(type, ngraph::Shape({numChannels}), scale.data);
+        return std::make_shared<ngraph::op::PRelu>(node, slope);
     }
-#endif  // HAVE_VULKAN
+#endif  // HAVE_INF_ENGINE
+
 
     bool tryFuse(Ptr<dnn::Layer>&) { return false; }
 
