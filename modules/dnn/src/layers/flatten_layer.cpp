@@ -43,6 +43,8 @@
 #include "../precomp.hpp"
 #include "layers_common.hpp"
 #include "../op_inf_engine.hpp"
+#include "../ie_ngraph.hpp"
+
 #include <float.h>
 #include <algorithm>
 #include <opencv2/dnn/shape_utils.hpp>
@@ -65,7 +67,7 @@ public:
     virtual bool supportBackend(int backendId) CV_OVERRIDE
     {
         return backendId == DNN_BACKEND_OPENCV ||
-               backendId == DNN_BACKEND_INFERENCE_ENGINE && haveInfEngine();
+               ((backendId == DNN_BACKEND_INFERENCE_ENGINE || backendId == DNN_BACKEND_NGRAPH) && haveInfEngine());
     }
 
     bool getMemoryShapes(const std::vector<MatShape> &inputs,
@@ -103,6 +105,16 @@ public:
         outputs.resize(inputs.size(), outputShapeVec);
 
         return true;
+    }
+
+    void finalize(InputArrayOfArrays inputs_arr, OutputArrayOfArrays) CV_OVERRIDE
+    {
+        std::vector<Mat> inputs;
+        inputs_arr.getMatVector(inputs);
+
+        int numAxes = inputs[0].dims;
+        _startAxis = clamp(_startAxis, numAxes);
+        _endAxis = clamp(_endAxis, numAxes);
     }
 
 #ifdef HAVE_OPENCL
@@ -152,20 +164,47 @@ public:
         }
     }
 
-    virtual Ptr<BackendNode> initInfEngine(const std::vector<Ptr<BackendWrapper> >&) CV_OVERRIDE
-    {
 #ifdef HAVE_INF_ENGINE
-        InferenceEngine::LayerParams lp;
-        lp.name = name;
-        lp.type = "Flatten";
-        lp.precision = InferenceEngine::Precision::FP32;
-        std::shared_ptr<InferenceEngine::CNNLayer> ieLayer(new InferenceEngine::CNNLayer(lp));
-        ieLayer->params["axis"] = format("%d", _startAxis);
-        ieLayer->params["end_axis"] = format("%d", _endAxis);
+    virtual Ptr<BackendNode> initInfEngine(const std::vector<Ptr<BackendWrapper> >& inputs) CV_OVERRIDE
+    {
+        InferenceEngine::Builder::Layer ieLayer(name);
+        ieLayer.setName(name);
+        ieLayer.setType("Flatten");
+        ieLayer.getParameters()["axis"] = (size_t)_startAxis;
+        ieLayer.getParameters()["end_axis"] = _endAxis;  // Do not cast to size_t because it might be negative.
+        ieLayer.setInputPorts(std::vector<InferenceEngine::Port>(1));
+        ieLayer.setOutputPorts(std::vector<InferenceEngine::Port>(1));
         return Ptr<BackendNode>(new InfEngineBackendNode(ieLayer));
-#endif  // HAVE_INF_ENGINE
-        return Ptr<BackendNode>();
     }
+#endif  // HAVE_INF_ENGINE
+
+#ifdef HAVE_INF_ENGINE
+virtual Ptr<BackendNode> initNgraph(const std::vector<Ptr<BackendWrapper> >& inputs,
+                                    const std::vector<Ptr<BackendNode> >& nodes) CV_OVERRIDE
+{
+        auto& ieInpNode = nodes[0].dynamicCast<InfEngineNgraphNode>()->node;
+        std::vector<size_t> dims = ieInpNode->get_shape();
+
+        int numAxes = dims.size();
+        int startAxis = clamp(_startAxis, numAxes);
+        int endAxis = clamp(_endAxis, numAxes);
+
+        CV_Assert(startAxis >= 0);
+        CV_Assert(endAxis >= startAxis && endAxis < numAxes);
+        int64_t flattenedDimensionSize = std::accumulate(dims.begin() + startAxis,
+                                         dims.begin() + endAxis + 1, 1, std::multiplies<size_t>());
+
+        std::vector<int64_t> outputShapeVec(dims.begin(), dims.begin() + startAxis);
+        outputShapeVec.push_back(flattenedDimensionSize);
+        outputShapeVec.insert(outputShapeVec.end(), dims.begin() + endAxis + 1, dims.end());
+
+        auto shape   = std::make_shared<ngraph::op::Constant>(ngraph::element::i64,
+                       ngraph::Shape({outputShapeVec.size()}), outputShapeVec.data());
+        auto reshape = std::make_shared<ngraph::op::DynReshape>(ieInpNode, shape);
+        return Ptr<BackendNode>(new InfEngineNgraphNode(reshape));
+    }
+#endif  // HAVE_INF_ENGINE
+  // HAVE_INF_ENGINE
 
     int _startAxis;
     int _endAxis;
