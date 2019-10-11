@@ -63,7 +63,7 @@ Mutex& getInitializationMutex()
 Mutex* __initialization_mutex_initializer = &getInitializationMutex();
 
 static bool param_dumpErrors = utils::getConfigurationParameterBool("OPENCV_DUMP_ERRORS",
-#if defined(_DEBUG) || defined(__ANDROID__)
+#if defined(_DEBUG) || defined(__ANDROID__) || (defined(__GNUC__) && !defined(__EXCEPTIONS))
     true
 #else
     false
@@ -71,6 +71,8 @@ static bool param_dumpErrors = utils::getConfigurationParameterBool("OPENCV_DUMP
 );
 
 void* allocSingletonBuffer(size_t size) { return fastMalloc(size); }
+void* allocSingletonNewBuffer(size_t size) { return malloc(size); }
+
 
 } // namespace cv
 
@@ -94,7 +96,7 @@ void* allocSingletonBuffer(size_t size) { return fastMalloc(size); }
 #include <cstdlib>        // std::abort
 #endif
 
-#if defined __ANDROID__ || defined __linux__ || defined __FreeBSD__ || defined __HAIKU__ || defined __Fuchsia__
+#if defined __ANDROID__ || defined __linux__ || defined __FreeBSD__ || defined __OpenBSD__ || defined __HAIKU__
 #  include <unistd.h>
 #  include <fcntl.h>
 #  include <elf.h>
@@ -107,15 +109,14 @@ void* allocSingletonBuffer(size_t size) { return fastMalloc(size); }
 #  include <cpu-features.h>
 #endif
 
-#ifndef __VSX__
-# if defined __PPC64__ && defined __linux__
-#   include "sys/auxv.h"
-#   ifndef AT_HWCAP2
-#     define AT_HWCAP2 26
-#   endif
-#   ifndef PPC_FEATURE2_ARCH_2_07
-#     define PPC_FEATURE2_ARCH_2_07 0x80000000
-#   endif
+
+#if CV_VSX && defined __linux__
+# include "sys/auxv.h"
+# ifndef AT_HWCAP2
+#   define AT_HWCAP2 26
+# endif
+# ifndef PPC_FEATURE2_ARCH_3_00
+#   define PPC_FEATURE2_ARCH_3_00 0x00800000
 # endif
 #endif
 
@@ -355,17 +356,31 @@ struct HWFeatures
         g_hwFeatureNames[CPU_AVX_512PF] = "AVX512PF";
         g_hwFeatureNames[CPU_AVX_512VBMI] = "AVX512VBMI";
         g_hwFeatureNames[CPU_AVX_512VL] = "AVX512VL";
+        g_hwFeatureNames[CPU_AVX_512VBMI2] = "AVX512VBMI2";
+        g_hwFeatureNames[CPU_AVX_512VNNI] = "AVX512VNNI";
+        g_hwFeatureNames[CPU_AVX_512BITALG] = "AVX512BITALG";
+        g_hwFeatureNames[CPU_AVX_512VPOPCNTDQ] = "AVX512VPOPCNTDQ";
+        g_hwFeatureNames[CPU_AVX_5124VNNIW] = "AVX5124VNNIW";
+        g_hwFeatureNames[CPU_AVX_5124FMAPS] = "AVX5124FMAPS";
 
         g_hwFeatureNames[CPU_NEON] = "NEON";
 
         g_hwFeatureNames[CPU_VSX] = "VSX";
+        g_hwFeatureNames[CPU_VSX3] = "VSX3";
+
+        g_hwFeatureNames[CPU_MSA] = "MSA";
 
         g_hwFeatureNames[CPU_AVX512_SKX] = "AVX512-SKX";
+        g_hwFeatureNames[CPU_AVX512_KNL] = "AVX512-KNL";
+        g_hwFeatureNames[CPU_AVX512_KNM] = "AVX512-KNM";
+        g_hwFeatureNames[CPU_AVX512_CNL] = "AVX512-CNL";
+        g_hwFeatureNames[CPU_AVX512_CEL] = "AVX512-CEL";
+        g_hwFeatureNames[CPU_AVX512_ICL] = "AVX512-ICL";
     }
 
     void initialize(void)
     {
-#ifndef WINRT
+#ifndef NO_GETENV
         if (getenv("OPENCV_DUMP_CONFIG"))
         {
             fprintf(stderr, "\nOpenCV build configuration is:\n%s\n",
@@ -402,15 +417,21 @@ struct HWFeatures
 
             have[CV_CPU_AVX2]   = (cpuid_data_ex[1] & (1<<5)) != 0;
 
-            have[CV_CPU_AVX_512F]       = (cpuid_data_ex[1] & (1<<16)) != 0;
-            have[CV_CPU_AVX_512DQ]      = (cpuid_data_ex[1] & (1<<17)) != 0;
-            have[CV_CPU_AVX_512IFMA512] = (cpuid_data_ex[1] & (1<<21)) != 0;
-            have[CV_CPU_AVX_512PF]      = (cpuid_data_ex[1] & (1<<26)) != 0;
-            have[CV_CPU_AVX_512ER]      = (cpuid_data_ex[1] & (1<<27)) != 0;
-            have[CV_CPU_AVX_512CD]      = (cpuid_data_ex[1] & (1<<28)) != 0;
-            have[CV_CPU_AVX_512BW]      = (cpuid_data_ex[1] & (1<<30)) != 0;
-            have[CV_CPU_AVX_512VL]      = (cpuid_data_ex[1] & (1<<31)) != 0;
-            have[CV_CPU_AVX_512VBMI]    = (cpuid_data_ex[2] & (1<<1)) != 0;
+            have[CV_CPU_AVX_512F]         = (cpuid_data_ex[1] & (1<<16)) != 0;
+            have[CV_CPU_AVX_512DQ]        = (cpuid_data_ex[1] & (1<<17)) != 0;
+            have[CV_CPU_AVX_512IFMA]      = (cpuid_data_ex[1] & (1<<21)) != 0;
+            have[CV_CPU_AVX_512PF]        = (cpuid_data_ex[1] & (1<<26)) != 0;
+            have[CV_CPU_AVX_512ER]        = (cpuid_data_ex[1] & (1<<27)) != 0;
+            have[CV_CPU_AVX_512CD]        = (cpuid_data_ex[1] & (1<<28)) != 0;
+            have[CV_CPU_AVX_512BW]        = (cpuid_data_ex[1] & (1<<30)) != 0;
+            have[CV_CPU_AVX_512VL]        = (cpuid_data_ex[1] & (1<<31)) != 0;
+            have[CV_CPU_AVX_512VBMI]      = (cpuid_data_ex[2] & (1<<1))  != 0;
+            have[CV_CPU_AVX_512VBMI2]     = (cpuid_data_ex[2] & (1<<6))  != 0;
+            have[CV_CPU_AVX_512VNNI]      = (cpuid_data_ex[2] & (1<<11)) != 0;
+            have[CV_CPU_AVX_512BITALG]    = (cpuid_data_ex[2] & (1<<12)) != 0;
+            have[CV_CPU_AVX_512VPOPCNTDQ] = (cpuid_data_ex[2] & (1<<14)) != 0;
+            have[CV_CPU_AVX_5124VNNIW]    = (cpuid_data_ex[3] & (1<<2))  != 0;
+            have[CV_CPU_AVX_5124FMAPS]    = (cpuid_data_ex[3] & (1<<3))  != 0;
 
             bool have_AVX_OS_support = true;
             bool have_AVX512_OS_support = true;
@@ -444,15 +465,38 @@ struct HWFeatures
                 have[CV_CPU_AVX_512CD] = false;
                 have[CV_CPU_AVX_512DQ] = false;
                 have[CV_CPU_AVX_512ER] = false;
-                have[CV_CPU_AVX_512IFMA512] = false;
+                have[CV_CPU_AVX_512IFMA] = false;
                 have[CV_CPU_AVX_512PF] = false;
                 have[CV_CPU_AVX_512VBMI] = false;
                 have[CV_CPU_AVX_512VL] = false;
+                have[CV_CPU_AVX_512VBMI2] = false;
+                have[CV_CPU_AVX_512VNNI] = false;
+                have[CV_CPU_AVX_512BITALG] = false;
+                have[CV_CPU_AVX_512VPOPCNTDQ] = false;
+                have[CV_CPU_AVX_5124VNNIW] = false;
+                have[CV_CPU_AVX_5124FMAPS] = false;
             }
 
-            if (have[CV_CPU_AVX_512F])
+            have[CV_CPU_AVX512_COMMON] = have[CV_CPU_AVX_512F] && have[CV_CPU_AVX_512CD];
+            if (have[CV_CPU_AVX512_COMMON])
             {
-                have[CV_CPU_AVX512_SKX] = have[CV_CPU_AVX_512F] & have[CV_CPU_AVX_512CD] & have[CV_CPU_AVX_512BW] & have[CV_CPU_AVX_512DQ] & have[CV_CPU_AVX_512VL];
+                have[CV_CPU_AVX512_KNL] = have[CV_CPU_AVX_512ER]  && have[CV_CPU_AVX_512PF];
+                have[CV_CPU_AVX512_KNM] = have[CV_CPU_AVX512_KNL] && have[CV_CPU_AVX_5124FMAPS] &&
+                                          have[CV_CPU_AVX_5124VNNIW] && have[CV_CPU_AVX_512VPOPCNTDQ];
+                have[CV_CPU_AVX512_SKX] = have[CV_CPU_AVX_512BW] && have[CV_CPU_AVX_512DQ] && have[CV_CPU_AVX_512VL];
+                have[CV_CPU_AVX512_CNL] = have[CV_CPU_AVX512_SKX] && have[CV_CPU_AVX_512IFMA] && have[CV_CPU_AVX_512VBMI];
+                have[CV_CPU_AVX512_CEL] = have[CV_CPU_AVX512_CNL] && have[CV_CPU_AVX_512VNNI];
+                have[CV_CPU_AVX512_ICL] = have[CV_CPU_AVX512_CEL] && have[CV_CPU_AVX_512VBMI2] &&
+                                          have[CV_CPU_AVX_512BITALG] && have[CV_CPU_AVX_512VPOPCNTDQ];
+            }
+            else
+            {
+                have[CV_CPU_AVX512_KNL] = false;
+                have[CV_CPU_AVX512_KNM] = false;
+                have[CV_CPU_AVX512_SKX] = false;
+                have[CV_CPU_AVX512_CNL] = false;
+                have[CV_CPU_AVX512_CEL] = false;
+                have[CV_CPU_AVX512_ICL] = false;
             }
         }
     #endif // CV_CPUID_X86
@@ -512,15 +556,20 @@ struct HWFeatures
         have[CV_CPU_FP16] = true;
     #endif
     #endif
-
-    #ifdef __VSX__
-        have[CV_CPU_VSX] = true;
-    #elif (defined __PPC64__ && defined __linux__)
-        uint64 hwcaps = getauxval(AT_HWCAP);
+    #if defined _ARM_ && (defined(_WIN32_WCE) && _WIN32_WCE >= 0x800)
+        have[CV_CPU_NEON] = true;
+    #endif
+    #ifdef __mips_msa
+        have[CV_CPU_MSA] = true;
+    #endif
+    // there's no need to check VSX availability in runtime since it's always available on ppc64le CPUs
+    have[CV_CPU_VSX] = (CV_VSX);
+    // TODO: Check VSX3 availability in runtime for other platforms
+    #if CV_VSX && defined __linux__
         uint64 hwcap2 = getauxval(AT_HWCAP2);
-        have[CV_CPU_VSX] = (hwcaps & PPC_FEATURE_PPC_LE && hwcaps & PPC_FEATURE_HAS_VSX && hwcap2 & PPC_FEATURE2_ARCH_2_07);
+        have[CV_CPU_VSX3] = (hwcap2 & PPC_FEATURE2_ARCH_3_00);
     #else
-        have[CV_CPU_VSX] = false;
+        have[CV_CPU_VSX3] = (CV_VSX3);
     #endif
 
         int baseline_features[] = { CV_CPU_BASELINE_FEATURES };
@@ -572,10 +621,10 @@ struct HWFeatures
     {
         bool dump = true;
         const char* disabled_features =
-#ifndef WINRT
-                getenv("OPENCV_CPU_DISABLE");
-#else
+#ifdef NO_GETENV
                 NULL;
+#else
+                getenv("OPENCV_CPU_DISABLE");
 #endif
         if (disabled_features && disabled_features[0] != 0)
         {
@@ -619,11 +668,14 @@ struct HWFeatures
                         }
                         if (isBaseline)
                         {
-                            if (dump) fprintf(stderr, "OPENCV: Trying to disable baseline CPU feature: '%s'. This has very limited effect, because code optimizations for this feature are executed unconditionally in the most cases.\n", getHWFeatureNameSafe(i));
+                            if (dump) fprintf(stderr, "OPENCV: Trying to disable baseline CPU feature: '%s'."
+                                                      "This has very limited effect, because code optimizations for this feature are executed unconditionally "
+                                                      "in the most cases.\n", getHWFeatureNameSafe(i));
                         }
                         if (!have[i])
                         {
-                            if (dump) fprintf(stderr, "OPENCV: Trying to disable unavailable CPU feature on the current platform: '%s'.\n", getHWFeatureNameSafe(i));
+                            if (dump) fprintf(stderr, "OPENCV: Trying to disable unavailable CPU feature on the current platform: '%s'.\n",
+                                getHWFeatureNameSafe(i));
                         }
                         have[i] = false;
 
@@ -689,6 +741,9 @@ void setUseOptimized( bool flag )
 #ifdef HAVE_OPENCL
     ocl::setUseOpenCL(flag);
 #endif
+#ifdef HAVE_TEGRA_OPTIMIZATION
+    ::tegra::setUseTegra(flag);
+#endif
 }
 
 bool useOptimized(void)
@@ -710,8 +765,7 @@ int64 getTickCount(void)
     return (int64)mach_absolute_time();
 #else
     struct timeval tv;
-    struct timezone tz;
-    gettimeofday( &tv, &tz );
+    gettimeofday(&tv, NULL);
     return (int64)tv.tv_sec*1000000 + tv.tv_usec;
 #endif
 }
@@ -845,7 +899,7 @@ String format( const char* fmt, ... )
 String tempfile( const char* suffix )
 {
     String fname;
-#ifndef WINRT
+#ifndef NO_GETENV
     const char *temp_dir = getenv("OPENCV_TEMP_PATH");
 #endif
 
@@ -866,6 +920,20 @@ String tempfile( const char* suffix )
     CV_Assert((copied != MAX_PATH) && (copied != (size_t)-1));
     fname = String(aname);
     RoUninitialize();
+#elif defined(_WIN32_WCE)
+    const auto kMaxPathSize = MAX_PATH+1;
+    wchar_t temp_dir[kMaxPathSize] = {0};
+    wchar_t temp_file[kMaxPathSize] = {0};
+
+    ::GetTempPathW(kMaxPathSize, temp_dir);
+
+    if(0 != ::GetTempFileNameW(temp_dir, L"ocv", 0, temp_file)) {
+        DeleteFileW(temp_file);
+        char aname[MAX_PATH];
+        size_t copied = wcstombs(aname, temp_file, MAX_PATH);
+        CV_Assert((copied != MAX_PATH) && (copied != (size_t)-1));
+        fname = String(aname);
+    }
 #else
     char temp_dir2[MAX_PATH] = { 0 };
     char temp_file[MAX_PATH] = { 0 };
@@ -993,13 +1061,6 @@ static void cv_terminate_handler() {
 
 #endif
 
-#ifdef __GNUC__
-# if defined __clang__ || defined __APPLE__
-#   pragma GCC diagnostic push
-#   pragma GCC diagnostic ignored "-Winvalid-noreturn"
-# endif
-#endif
-
 void error( const Exception& exc )
 {
 #ifdef CV_ERROR_SET_TERMINATE_HANDLER
@@ -1030,32 +1091,12 @@ void error( const Exception& exc )
     }
 
     throw exc;
-#ifdef __GNUC__
-# if !defined __clang__ && !defined __APPLE__
-    // this suppresses this warning: "noreturn" function does return [enabled by default]
-    __builtin_trap();
-    // or use infinite loop: for (;;) {}
-# endif
-#endif
 }
 
 void error(int _code, const String& _err, const char* _func, const char* _file, int _line)
 {
     error(cv::Exception(_code, _err, _func, _file, _line));
-#ifdef __GNUC__
-# if !defined __clang__ && !defined __APPLE__
-    // this suppresses this warning: "noreturn" function does return [enabled by default]
-    __builtin_trap();
-    // or use infinite loop: for (;;) {}
-# endif
-#endif
 }
-
-#ifdef __GNUC__
-# if defined __clang__ || defined __APPLE__
-#   pragma GCC diagnostic pop
-# endif
-#endif
 
 
 ErrorCallback
@@ -1150,7 +1191,7 @@ CV_IMPL const char* cvErrorStr( int status )
     case CV_BadDepth :               return "Input image depth is not supported by function";
     case CV_StsUnmatchedFormats :    return "Formats of input arguments do not match";
     case CV_StsUnmatchedSizes :      return "Sizes of input arguments do not match";
-    case CV_StsOutOfRange :          return "One of arguments\' values is out of range";
+    case CV_StsOutOfRange :          return "One of the arguments\' values is out of range";
     case CV_StsUnsupportedFormat :   return "Unsupported format or combination of formats";
     case CV_BadCOI :                 return "Input COI is not supported";
     case CV_BadNumChannels :         return "Bad number of channels";
@@ -1232,6 +1273,93 @@ cvErrorFromIppStatus( int status )
 
 namespace cv {
 bool __termination = false;
+}
+
+namespace cv
+{
+
+#if defined _WIN32 || defined WINCE
+
+struct Mutex::Impl
+{
+    Impl()
+    {
+#if (_WIN32_WINNT >= 0x0600)
+        ::InitializeCriticalSectionEx(&cs, 1000, 0);
+#else
+        ::InitializeCriticalSection(&cs);
+#endif
+        refcount = 1;
+    }
+    ~Impl() { DeleteCriticalSection(&cs); }
+
+    void lock() { EnterCriticalSection(&cs); }
+    bool trylock() { return TryEnterCriticalSection(&cs) != 0; }
+    void unlock() { LeaveCriticalSection(&cs); }
+
+    CRITICAL_SECTION cs;
+    int refcount;
+};
+
+#else
+
+struct Mutex::Impl
+{
+    Impl()
+    {
+        pthread_mutexattr_t attr;
+        pthread_mutexattr_init(&attr);
+        pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE);
+        pthread_mutex_init(&mt, &attr);
+        pthread_mutexattr_destroy(&attr);
+
+        refcount = 1;
+    }
+    ~Impl() { pthread_mutex_destroy(&mt); }
+
+    void lock() { pthread_mutex_lock(&mt); }
+    bool trylock() { return pthread_mutex_trylock(&mt) == 0; }
+    void unlock() { pthread_mutex_unlock(&mt); }
+
+    pthread_mutex_t mt;
+    int refcount;
+};
+
+#endif
+
+Mutex::Mutex()
+{
+    impl = new Mutex::Impl;
+}
+
+Mutex::~Mutex()
+{
+    if( CV_XADD(&impl->refcount, -1) == 1 )
+        delete impl;
+    impl = 0;
+}
+
+Mutex::Mutex(const Mutex& m)
+{
+    impl = m.impl;
+    CV_XADD(&impl->refcount, 1);
+}
+
+Mutex& Mutex::operator = (const Mutex& m)
+{
+    if (this != &m)
+    {
+        CV_XADD(&m.impl->refcount, 1);
+        if( CV_XADD(&impl->refcount, -1) == 1 )
+            delete impl;
+        impl = m.impl;
+    }
+    return *this;
+}
+
+void Mutex::lock() { impl->lock(); }
+void Mutex::unlock() { impl->unlock(); }
+bool Mutex::trylock() { return impl->trylock(); }
 
 
 //////////////////////////////// thread-local storage ////////////////////////////////
@@ -1714,7 +1842,7 @@ size_t utils::getConfigurationParameterSizeT(const char* name, size_t defaultVal
 
 cv::String utils::getConfigurationParameterString(const char* name, const char* defaultValue)
 {
-    return read<cv::String>(name, defaultValue ? cv::String(defaultValue) : cv::String());
+    return read<cv::String>(name, defaultValue);
 }
 
 utils::Paths utils::getConfigurationParameterPaths(const char* name, const utils::Paths &defaultValue)
@@ -2012,9 +2140,7 @@ public:
         ippFeatures = cpuFeatures;
 
         const char* pIppEnv = getenv("OPENCV_IPP");
-        cv::String env;
-        if(pIppEnv != NULL)
-            env = pIppEnv;
+        cv::String env = pIppEnv;
         if(env.size())
         {
 #if IPP_VERSION_X100 >= 201900
@@ -2034,7 +2160,7 @@ public:
             const Ipp64u minorFeatures = 0;
 #endif
 
-            env = toLowerCase(env);
+            env = env.toLowerCase();
             if(env.substr(0, 2) == "ne")
             {
                 useIPP_NE = true;
@@ -2127,10 +2253,18 @@ static IPPInitSingleton& getIPPSingleton()
 }
 #endif
 
+#if OPENCV_ABI_COMPATIBILITY > 300
 unsigned long long getIppFeatures()
+#else
+int getIppFeatures()
+#endif
 {
 #ifdef HAVE_IPP
+#if OPENCV_ABI_COMPATIBILITY > 300
     return getIPPSingleton().ippFeatures;
+#else
+    return (int)getIPPSingleton().ippFeatures;
+#endif
 #else
     return 0;
 #endif
@@ -2240,8 +2374,50 @@ void setUseIPP_NotExact(bool flag)
 #endif
 }
 
+#if OPENCV_ABI_COMPATIBILITY < 400
+bool useIPP_NE()
+{
+    return useIPP_NotExact();
+}
+
+void setUseIPP_NE(bool flag)
+{
+    setUseIPP_NotExact(flag);
+}
+#endif
+
 } // namespace ipp
 
 } // namespace cv
+
+#ifdef HAVE_TEGRA_OPTIMIZATION
+
+namespace tegra {
+
+bool useTegra()
+{
+    cv::CoreTLSData* data = cv::getCoreTlsData().get();
+
+    if (data->useTegra < 0)
+    {
+        const char* pTegraEnv = getenv("OPENCV_TEGRA");
+        if (pTegraEnv && (cv::String(pTegraEnv) == "disabled"))
+            data->useTegra = false;
+        else
+            data->useTegra = true;
+    }
+
+    return (data->useTegra > 0);
+}
+
+void setUseTegra(bool flag)
+{
+    cv::CoreTLSData* data = cv::getCoreTlsData().get();
+    data->useTegra = flag;
+}
+
+} // namespace tegra
+
+#endif
 
 /* End of file. */
