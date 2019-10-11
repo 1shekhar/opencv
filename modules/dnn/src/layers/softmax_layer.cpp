@@ -90,9 +90,14 @@ public:
     virtual bool supportBackend(int backendId) CV_OVERRIDE
     {
         return backendId == DNN_BACKEND_OPENCV ||
+<<<<<<< HEAD
                backendId == DNN_BACKEND_HALIDE && haveHalide() && axisRaw == 1 ||
                backendId == DNN_BACKEND_INFERENCE_ENGINE && haveInfEngine() && !logSoftMax ||
                backendId == DNN_BACKEND_VKCOM && haveVulkan();
+=======
+               (backendId == DNN_BACKEND_HALIDE && haveHalide() && axisRaw == 1) ||
+               (backendId == DNN_BACKEND_INFERENCE_ENGINE && haveInfEngine() && !logSoftMax);
+>>>>>>> 1c04a5ec47e358ae1aa34b10b582dc342c4b0b91
     }
 
 #ifdef HAVE_OPENCL

@@ -106,8 +106,12 @@ public:
     virtual bool supportBackend(int backendId) CV_OVERRIDE
     {
         return backendId == DNN_BACKEND_OPENCV ||
+<<<<<<< HEAD
                backendId == DNN_BACKEND_INFERENCE_ENGINE && haveInfEngine() ||
                backendId == DNN_BACKEND_VKCOM && haveVulkan();
+=======
+               (backendId == DNN_BACKEND_INFERENCE_ENGINE && haveInfEngine());
+>>>>>>> 1c04a5ec47e358ae1aa34b10b582dc342c4b0b91
     }
 
     bool getMemoryShapes(const std::vector<MatShape> &inputs,

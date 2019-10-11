@@ -105,9 +105,14 @@ public:
     virtual bool supportBackend(int backendId) CV_OVERRIDE
     {
         return backendId == DNN_BACKEND_OPENCV ||
+<<<<<<< HEAD
                backendId == DNN_BACKEND_HALIDE && haveHalide() && axis == 1 && !padding ||  // By channels
                backendId == DNN_BACKEND_INFERENCE_ENGINE && haveInfEngine() && !padding ||
                backendId == DNN_BACKEND_VKCOM && haveVulkan() && !padding;
+=======
+               (backendId == DNN_BACKEND_HALIDE && haveHalide() && axis == 1 && !padding) ||  // By channels
+               (backendId == DNN_BACKEND_INFERENCE_ENGINE && haveInfEngine() && !padding);
+>>>>>>> 1c04a5ec47e358ae1aa34b10b582dc342c4b0b91
     }
 
     class ChannelConcatInvoker : public ParallelLoopBody
