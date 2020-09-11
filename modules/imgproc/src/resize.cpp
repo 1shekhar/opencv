@@ -340,155 +340,6 @@ static void hlineResizeCn(ET* src, int cn, int *ofst, FT* m, FT* dst, int dst_mi
     hline<ET, FT, n, mulall, cncnt>::ResizeCn(src, cn, ofst, m, dst, dst_min, dst_max, dst_width);
 };
 
-#if CV_SIMD512
-inline void v_load_indexed1(uint8_t* src, int *ofst, v_uint16 &v_src0, v_uint16 &v_src1)
-{
-    v_expand(v_reinterpret_as_u8(v_uint16(
-                 *((uint16_t*)(src + ofst[ 0])), *((uint16_t*)(src + ofst[ 1])), *((uint16_t*)(src + ofst[ 2])), *((uint16_t*)(src + ofst[ 3])),
-                 *((uint16_t*)(src + ofst[ 4])), *((uint16_t*)(src + ofst[ 5])), *((uint16_t*)(src + ofst[ 6])), *((uint16_t*)(src + ofst[ 7])),
-                 *((uint16_t*)(src + ofst[ 8])), *((uint16_t*)(src + ofst[ 9])), *((uint16_t*)(src + ofst[10])), *((uint16_t*)(src + ofst[11])),
-                 *((uint16_t*)(src + ofst[12])), *((uint16_t*)(src + ofst[13])), *((uint16_t*)(src + ofst[14])), *((uint16_t*)(src + ofst[15])),
-                 *((uint16_t*)(src + ofst[16])), *((uint16_t*)(src + ofst[17])), *((uint16_t*)(src + ofst[14])), *((uint16_t*)(src + ofst[15])),
-                 *((uint16_t*)(src + ofst[20])), *((uint16_t*)(src + ofst[21])), *((uint16_t*)(src + ofst[14])), *((uint16_t*)(src + ofst[15])),
-                 *((uint16_t*)(src + ofst[24])), *((uint16_t*)(src + ofst[25])), *((uint16_t*)(src + ofst[14])), *((uint16_t*)(src + ofst[15])),
-                 *((uint16_t*)(src + ofst[28])), *((uint16_t*)(src + ofst[29])), *((uint16_t*)(src + ofst[14])), *((uint16_t*)(src + ofst[15])))),
-             v_src0, v_src1);
-}
-inline void v_load_indexed2(uint8_t* src, int *ofst, v_uint16 &v_src0, v_uint16 &v_src1)
-{
-    v_expand(v_reinterpret_as_u8(v_uint32(
-                 *((uint32_t*)(src + 2 * ofst[ 0])), *((uint32_t*)(src + 2 * ofst[ 1])), *((uint32_t*)(src + 2 * ofst[ 2])), *((uint32_t*)(src + 2 * ofst[ 3])),
-                 *((uint32_t*)(src + 2 * ofst[ 4])), *((uint32_t*)(src + 2 * ofst[ 5])), *((uint32_t*)(src + 2 * ofst[ 6])), *((uint32_t*)(src + 2 * ofst[ 7])),
-                 *((uint32_t*)(src + 2 * ofst[ 8])), *((uint32_t*)(src + 2 * ofst[ 9])), *((uint32_t*)(src + 2 * ofst[10])), *((uint32_t*)(src + 2 * ofst[11])),
-                 *((uint32_t*)(src + 2 * ofst[12])), *((uint32_t*)(src + 2 * ofst[13])), *((uint32_t*)(src + 2 * ofst[14])), *((uint32_t*)(src + 2 * ofst[15])))),
-             v_src0, v_src1);
-    v_uint32 v_tmp0, v_tmp1, v_tmp2, v_tmp3;
-    v_zip(v_reinterpret_as_u32(v_src0), v_reinterpret_as_u32(v_src1), v_tmp2, v_tmp3);
-    v_zip(v_tmp2, v_tmp3, v_tmp0, v_tmp1);
-    v_zip(v_tmp0, v_tmp1, v_tmp2, v_tmp3);
-    v_zip(v_tmp2, v_tmp3, v_tmp0, v_tmp1);
-    v_zip(v_reinterpret_as_u16(v_tmp0), v_reinterpret_as_u16(v_tmp1), v_src0, v_src1);
-}
-inline void v_load_indexed4(uint8_t* src, int *ofst, v_uint16 &v_src0, v_uint16 &v_src1)
-{
-    v_expand(v_reinterpret_as_u8(v_uint64(
-                 *((uint64_t*)(src + 4 * ofst[0])), *((uint64_t*)(src + 4 * ofst[1])), *((uint64_t*)(src + 4 * ofst[2])), *((uint64_t*)(src + 4 * ofst[3])),
-                 *((uint64_t*)(src + 4 * ofst[4])), *((uint64_t*)(src + 4 * ofst[5])), *((uint64_t*)(src + 4 * ofst[6])), *((uint64_t*)(src + 4 * ofst[7])))),
-             v_src0, v_src1);
-    v_uint64 v_tmp0, v_tmp1, v_tmp2, v_tmp3;
-    v_zip(v_reinterpret_as_u64(v_src0), v_reinterpret_as_u64(v_src1), v_tmp2, v_tmp3);
-    v_zip(v_tmp2, v_tmp3, v_tmp0, v_tmp1);
-    v_zip(v_tmp0, v_tmp1, v_tmp2, v_tmp3);
-    v_zip(v_reinterpret_as_u16(v_tmp2), v_reinterpret_as_u16(v_tmp3), v_src0, v_src1);
-}
-inline void v_load_indexed_deinterleave(uint16_t* src, int *ofst, v_uint32 &v_src0, v_uint32 &v_src1)
-{
-    v_expand(v_reinterpret_as_u16(v_uint32(
-                 *((uint32_t*)(src + ofst[ 0])), *((uint32_t*)(src + ofst[ 1])), *((uint32_t*)(src + ofst[ 2])), *((uint32_t*)(src + ofst[ 3])),
-                 *((uint32_t*)(src + ofst[ 4])), *((uint32_t*)(src + ofst[ 5])), *((uint32_t*)(src + ofst[ 6])), *((uint32_t*)(src + ofst[ 7])),
-                 *((uint32_t*)(src + ofst[ 8])), *((uint32_t*)(src + ofst[ 9])), *((uint32_t*)(src + ofst[10])), *((uint32_t*)(src + ofst[11])),
-                 *((uint32_t*)(src + ofst[12])), *((uint32_t*)(src + ofst[13])), *((uint32_t*)(src + ofst[14])), *((uint32_t*)(src + ofst[15])))),
-             v_src0, v_src1);
-    v_uint32 v_tmp0, v_tmp1;
-    v_zip(v_src0, v_src1, v_tmp0, v_tmp1);
-    v_zip(v_tmp0, v_tmp1, v_src0, v_src1);
-    v_zip(v_src0, v_src1, v_tmp0, v_tmp1);
-    v_zip(v_tmp0, v_tmp1, v_src0, v_src1);
-}
-#elif CV_SIMD256
-inline void v_load_indexed1(uint8_t* src, int *ofst, v_uint16 &v_src0, v_uint16 &v_src1)
-{
-    v_expand(v_reinterpret_as_u8(v_uint16(
-                 *((uint16_t*)(src + ofst[ 0])), *((uint16_t*)(src + ofst[ 1])), *((uint16_t*)(src + ofst[ 2])), *((uint16_t*)(src + ofst[ 3])),
-                 *((uint16_t*)(src + ofst[ 4])), *((uint16_t*)(src + ofst[ 5])), *((uint16_t*)(src + ofst[ 6])), *((uint16_t*)(src + ofst[ 7])),
-                 *((uint16_t*)(src + ofst[ 8])), *((uint16_t*)(src + ofst[ 9])), *((uint16_t*)(src + ofst[10])), *((uint16_t*)(src + ofst[11])),
-                 *((uint16_t*)(src + ofst[12])), *((uint16_t*)(src + ofst[13])), *((uint16_t*)(src + ofst[14])), *((uint16_t*)(src + ofst[15])))),
-             v_src0, v_src1);
-}
-inline void v_load_indexed2(uint8_t* src, int *ofst, v_uint16 &v_src0, v_uint16 &v_src1)
-{
-    v_expand(v_reinterpret_as_u8(v_uint32(
-                 *((uint32_t*)(src + 2 * ofst[0])), *((uint32_t*)(src + 2 * ofst[1])), *((uint32_t*)(src + 2 * ofst[2])), *((uint32_t*)(src + 2 * ofst[3])),
-                 *((uint32_t*)(src + 2 * ofst[4])), *((uint32_t*)(src + 2 * ofst[5])), *((uint32_t*)(src + 2 * ofst[6])), *((uint32_t*)(src + 2 * ofst[7])))),
-             v_src0, v_src1);
-    v_uint32 v_tmp0, v_tmp1, v_tmp2, v_tmp3;
-    v_zip(v_reinterpret_as_u32(v_src0), v_reinterpret_as_u32(v_src1), v_tmp2, v_tmp3);
-    v_zip(v_tmp2, v_tmp3, v_tmp0, v_tmp1);
-    v_zip(v_tmp0, v_tmp1, v_tmp2, v_tmp3);
-    v_zip(v_reinterpret_as_u16(v_tmp2), v_reinterpret_as_u16(v_tmp3), v_src0, v_src1);
-}
-inline void v_load_indexed4(uint8_t* src, int *ofst, v_uint16 &v_src0, v_uint16 &v_src1)
-{
-    v_expand(v_reinterpret_as_u8(v_uint64(
-                 *((uint64_t*)(src + 4 * ofst[0])), *((uint64_t*)(src + 4 * ofst[1])), *((uint64_t*)(src + 4 * ofst[2])), *((uint64_t*)(src + 4 * ofst[3])))),
-             v_src0, v_src1);
-    v_uint64 v_tmp0, v_tmp1, v_tmp2, v_tmp3;
-    v_zip(v_reinterpret_as_u64(v_src0), v_reinterpret_as_u64(v_src1), v_tmp2, v_tmp3);
-    v_zip(v_tmp2, v_tmp3, v_tmp0, v_tmp1);
-    v_zip(v_reinterpret_as_u16(v_tmp0), v_reinterpret_as_u16(v_tmp1), v_src0, v_src1);
-}
-inline void v_load_indexed_deinterleave(uint16_t* src, int *ofst, v_uint32 &v_src0, v_uint32 &v_src1)
-{
-    v_uint32 v_tmp0, v_tmp1;
-    v_expand(v_reinterpret_as_u16(v_uint32(
-                 *((uint32_t*)(src + ofst[0])), *((uint32_t*)(src + ofst[1])), *((uint32_t*)(src + ofst[2])), *((uint32_t*)(src + ofst[3])),
-                 *((uint32_t*)(src + ofst[4])), *((uint32_t*)(src + ofst[5])), *((uint32_t*)(src + ofst[6])), *((uint32_t*)(src + ofst[7])))),
-             v_tmp0, v_tmp1);
-    v_zip(v_tmp0, v_tmp1, v_src0, v_src1);
-    v_zip(v_src0, v_src1, v_tmp0, v_tmp1);
-    v_zip(v_tmp0, v_tmp1, v_src0, v_src1);
-}
-#elif CV_SIMD128
-inline void v_load_indexed1(uint8_t* src, int *ofst, v_uint16 &v_src0, v_uint16 &v_src1)
-{
-    uint16_t buf[8];
-    buf[0] = *((uint16_t*)(src + ofst[0]));
-    buf[1] = *((uint16_t*)(src + ofst[1]));
-    buf[2] = *((uint16_t*)(src + ofst[2]));
-    buf[3] = *((uint16_t*)(src + ofst[3]));
-    buf[4] = *((uint16_t*)(src + ofst[4]));
-    buf[5] = *((uint16_t*)(src + ofst[5]));
-    buf[6] = *((uint16_t*)(src + ofst[6]));
-    buf[7] = *((uint16_t*)(src + ofst[7]));
-    v_src0 = vx_load_expand((uint8_t*)buf);
-    v_src1 = vx_load_expand((uint8_t*)buf + 8);
-}
-inline void v_load_indexed2(uint8_t* src, int *ofst, v_uint16 &v_src0, v_uint16 &v_src1)
-{
-    uint32_t buf[4];
-    buf[0] = *((uint32_t*)(src + 2 * ofst[0]));
-    buf[1] = *((uint32_t*)(src + 2 * ofst[1]));
-    buf[2] = *((uint32_t*)(src + 2 * ofst[2]));
-    buf[3] = *((uint32_t*)(src + 2 * ofst[3]));
-    v_uint32 v_tmp0, v_tmp1, v_tmp2, v_tmp3;
-    v_tmp0 = v_reinterpret_as_u32(vx_load_expand((uint8_t*)buf));
-    v_tmp1 = v_reinterpret_as_u32(vx_load_expand((uint8_t*)buf + 8));
-    v_zip(v_tmp0, v_tmp1, v_tmp2, v_tmp3);
-    v_zip(v_tmp2, v_tmp3, v_tmp0, v_tmp1);
-    v_zip(v_reinterpret_as_u16(v_tmp0), v_reinterpret_as_u16(v_tmp1), v_src0, v_src1);
-}
-inline void v_load_indexed4(uint8_t* src, int *ofst, v_uint16 &v_src0, v_uint16 &v_src1)
-{
-    v_uint16 v_tmp0, v_tmp1;
-    v_src0 = vx_load_expand(src + 4 * ofst[0]);
-    v_src1 = vx_load_expand(src + 4 * ofst[1]);
-    v_recombine(v_src0, v_src1, v_tmp0, v_tmp1);
-    v_zip(v_tmp0, v_tmp1, v_src0, v_src1);
-}
-inline void v_load_indexed_deinterleave(uint16_t* src, int *ofst, v_uint32 &v_src0, v_uint32 &v_src1)
-{
-    uint32_t buf[4];
-    buf[0] = *((uint32_t*)(src + ofst[0]));
-    buf[1] = *((uint32_t*)(src + ofst[1]));
-    buf[2] = *((uint32_t*)(src + ofst[2]));
-    buf[3] = *((uint32_t*)(src + ofst[3]));
-    v_src0 = vx_load_expand((uint16_t*)buf);
-    v_src1 = vx_load_expand((uint16_t*)buf + 4);
-    v_uint32 v_tmp0, v_tmp1;
-    v_zip(v_src0, v_src1, v_tmp0, v_tmp1);
-    v_zip(v_tmp0, v_tmp1, v_src0, v_src1);
-}
-#endif
 template <>
 void hlineResizeCn<uint8_t, ufixedpoint16, 2, true, 1>(uint8_t* src, int, int *ofst, ufixedpoint16* m, ufixedpoint16* dst, int dst_min, int dst_max, int dst_width)
 {
@@ -507,16 +358,23 @@ void hlineResizeCn<uint8_t, ufixedpoint16, 2, true, 1>(uint8_t* src, int, int *o
         *(dst++) = src_0;
     }
 #if CV_SIMD
-    for (; i <= dst_max - VECSZ; i += VECSZ, m += 2*VECSZ, dst += VECSZ)
+    for (; i <= dst_max - 2*VECSZ; i += 2*VECSZ, m += 4*VECSZ, dst += 2*VECSZ)
     {
         v_uint16 v_src0, v_src1;
-        v_load_indexed1(src, ofst + i, v_src0, v_src1);
-
-        v_int16 v_mul0 = vx_load((int16_t*)m);
-        v_int16 v_mul1 = vx_load((int16_t*)m + VECSZ);
-        v_uint32 v_res0 = v_reinterpret_as_u32(v_dotprod(v_reinterpret_as_s16(v_src0), v_mul0));
-        v_uint32 v_res1 = v_reinterpret_as_u32(v_dotprod(v_reinterpret_as_s16(v_src1), v_mul1));
-        v_store((uint16_t*)dst, v_pack(v_res0, v_res1));
+        v_expand(vx_lut_pairs(src, ofst + i), v_src0, v_src1);
+        v_store((uint16_t*)dst      , v_pack(v_reinterpret_as_u32(v_dotprod(v_reinterpret_as_s16(v_src0), vx_load((int16_t*)m))),
+                                             v_reinterpret_as_u32(v_dotprod(v_reinterpret_as_s16(v_src1), vx_load((int16_t*)m + VECSZ)))));
+        v_expand(vx_lut_pairs(src, ofst + i + VECSZ), v_src0, v_src1);
+        v_store((uint16_t*)dst+VECSZ, v_pack(v_reinterpret_as_u32(v_dotprod(v_reinterpret_as_s16(v_src0), vx_load((int16_t*)m + 2*VECSZ))),
+                                             v_reinterpret_as_u32(v_dotprod(v_reinterpret_as_s16(v_src1), vx_load((int16_t*)m + 3*VECSZ)))));
+    }
+    if (i <= dst_max - VECSZ)
+    {
+        v_uint16 v_src0, v_src1;
+        v_expand(vx_lut_pairs(src, ofst + i), v_src0, v_src1);
+        v_store((uint16_t*)dst, v_pack(v_reinterpret_as_u32(v_dotprod(v_reinterpret_as_s16(v_src0), vx_load((int16_t*)m))),
+                                       v_reinterpret_as_u32(v_dotprod(v_reinterpret_as_s16(v_src1), vx_load((int16_t*)m + VECSZ)))));
+        i += VECSZ; m += 2*VECSZ; dst += VECSZ;
     }
 #endif
     for (; i < dst_max; i += 1, m += 2)
@@ -564,7 +422,7 @@ void hlineResizeCn<uint8_t, ufixedpoint16, 2, true, 2>(uint8_t* src, int, int *o
     for (; i <= dst_max - VECSZ/2; i += VECSZ/2, m += VECSZ, dst += VECSZ)
     {
         v_uint16 v_src0, v_src1;
-        v_load_indexed2(src, ofst + i, v_src0, v_src1);
+        v_expand(v_interleave_pairs(v_reinterpret_as_u8(vx_lut_pairs((uint16_t*)src, ofst + i))), v_src0, v_src1);
 
         v_uint32 v_mul = vx_load((uint32_t*)m);//AaBbCcDd
         v_uint32 v_zip0, v_zip1;
@@ -595,6 +453,81 @@ void hlineResizeCn<uint8_t, ufixedpoint16, 2, true, 2>(uint8_t* src, int, int *o
     }
 }
 template <>
+void hlineResizeCn<uint8_t, ufixedpoint16, 2, true, 3>(uint8_t* src, int, int *ofst, ufixedpoint16* m, ufixedpoint16* dst, int dst_min, int dst_max, int dst_width)
+{
+    int i = 0;
+    union {
+        uint64_t q;
+        uint16_t w[4];
+    } srccn;
+    ((ufixedpoint16*)(srccn.w))[0] = src[0];
+    ((ufixedpoint16*)(srccn.w))[1] = src[1];
+    ((ufixedpoint16*)(srccn.w))[2] = src[2];
+    ((ufixedpoint16*)(srccn.w))[3] = 0;
+#if CV_SIMD
+    const int VECSZ = v_uint16::nlanes;
+    v_uint16 v_srccn = v_pack_triplets(v_reinterpret_as_u16(vx_setall_u64(srccn.q)));
+    for (; i <= dst_min - (VECSZ+2)/3; i += VECSZ/4, m += VECSZ/2, dst += 3*VECSZ/4) // Points that fall left from src image so became equal to leftmost src point
+    {
+        v_store((uint16_t*)dst, v_srccn);
+    }
+#endif
+    for (; i < dst_min; i++, m += 2)
+    {
+        *(dst++) = ((ufixedpoint16*)(srccn.w))[0];
+        *(dst++) = ((ufixedpoint16*)(srccn.w))[1];
+        *(dst++) = ((ufixedpoint16*)(srccn.w))[2];
+    }
+#if CV_SIMD
+    CV_DECL_ALIGNED(CV_SIMD_WIDTH) int ofst3[VECSZ/2];
+    for (; i <= dst_max - (3*VECSZ/4 + (VECSZ+2)/3); i += VECSZ/2, m += VECSZ, dst += 3*VECSZ/2)
+    {
+        v_store(ofst3, vx_load(ofst + i) * vx_setall_s32(3));
+        v_uint8 v_src01, v_src23;
+        v_uint16 v_src0, v_src1, v_src2, v_src3;
+        v_zip(vx_lut_quads(src, ofst3), v_reinterpret_as_u8(v_reinterpret_as_u32(vx_lut_quads(src+2, ofst3)) >> 8), v_src01, v_src23);
+        v_expand(v_src01, v_src0, v_src1);
+        v_expand(v_src23, v_src2, v_src3);
+
+        v_uint32 v_mul0, v_mul1, v_mul2, v_mul3, v_tmp;
+        v_mul0 = vx_load((uint32_t*)m);//AaBbCcDd
+        v_zip(v_mul0, v_mul0, v_mul3, v_tmp );//AaAaBbBb CcCcDdDd
+        v_zip(v_mul3, v_mul3, v_mul0, v_mul1);//AaAaAaAa BbBbBbBb
+        v_zip(v_tmp , v_tmp , v_mul2, v_mul3);//CcCcCcCc DdDdDdDd
+
+        v_uint32 v_res0 = v_reinterpret_as_u32(v_dotprod(v_reinterpret_as_s16(v_src0), v_reinterpret_as_s16(v_mul0)));
+        v_uint32 v_res1 = v_reinterpret_as_u32(v_dotprod(v_reinterpret_as_s16(v_src1), v_reinterpret_as_s16(v_mul1)));
+        v_uint32 v_res2 = v_reinterpret_as_u32(v_dotprod(v_reinterpret_as_s16(v_src2), v_reinterpret_as_s16(v_mul2)));
+        v_uint32 v_res3 = v_reinterpret_as_u32(v_dotprod(v_reinterpret_as_s16(v_src3), v_reinterpret_as_s16(v_mul3)));
+        v_store((uint16_t*)dst            , v_pack_triplets(v_pack(v_res0, v_res1)));
+        v_store((uint16_t*)dst + 3*VECSZ/4, v_pack_triplets(v_pack(v_res2, v_res3)));
+    }
+#endif
+    for (; i < dst_max; i += 1, m += 2)
+    {
+        uint8_t* px = src + 3 * ofst[i];
+        *(dst++) = m[0] * px[0] + m[1] * px[3];
+        *(dst++) = m[0] * px[1] + m[1] * px[4];
+        *(dst++) = m[0] * px[2] + m[1] * px[5];
+    }
+    ((ufixedpoint16*)(srccn.w))[0] = (src + 3*ofst[dst_width - 1])[0];
+    ((ufixedpoint16*)(srccn.w))[1] = (src + 3*ofst[dst_width - 1])[1];
+    ((ufixedpoint16*)(srccn.w))[2] = (src + 3*ofst[dst_width - 1])[2];
+#if CV_SIMD
+    v_srccn = v_pack_triplets(v_reinterpret_as_u16(vx_setall_u64(srccn.q)));
+    for (; i <= dst_width - (VECSZ+2)/3; i += VECSZ/4, dst += 3*VECSZ/4) // Points that fall right from src image so became equal to rightmost src point
+    {
+        v_store((uint16_t*)dst, v_srccn);
+    }
+#endif
+    for (; i < dst_width; i++)
+    {
+        *(dst++) = ((ufixedpoint16*)(srccn.w))[0];
+        *(dst++) = ((ufixedpoint16*)(srccn.w))[1];
+        *(dst++) = ((ufixedpoint16*)(srccn.w))[2];
+    }
+}
+template <>
 void hlineResizeCn<uint8_t, ufixedpoint16, 2, true, 4>(uint8_t* src, int, int *ofst, ufixedpoint16* m, ufixedpoint16* dst, int dst_min, int dst_max, int dst_width)
 {
     int i = 0;
@@ -614,20 +547,19 @@ void hlineResizeCn<uint8_t, ufixedpoint16, 2, true, 4>(uint8_t* src, int, int *o
         v_store((uint16_t*)dst, v_srccn);
     }
 #endif
-    if (i < dst_min) // Points that fall left from src image so became equal to leftmost src point
+    for (; i < dst_min; i++, m += 2)
     {
         *(dst++) = ((ufixedpoint16*)(srccn.w))[0];
         *(dst++) = ((ufixedpoint16*)(srccn.w))[1];
         *(dst++) = ((ufixedpoint16*)(srccn.w))[2];
         *(dst++) = ((ufixedpoint16*)(srccn.w))[3];
-        i++; m += 2;
     }
 #if CV_SIMD
     for (; i <= dst_max - VECSZ/2; i += VECSZ/2, m += VECSZ, dst += 2*VECSZ)
     {
         v_uint16 v_src0, v_src1, v_src2, v_src3;
-        v_load_indexed4(src, ofst + i, v_src0, v_src1);
-        v_load_indexed4(src, ofst + i + VECSZ/4, v_src2, v_src3);
+        v_expand(v_interleave_quads(v_reinterpret_as_u8(vx_lut_pairs((uint32_t*)src, ofst + i))), v_src0, v_src1);
+        v_expand(v_interleave_quads(v_reinterpret_as_u8(vx_lut_pairs((uint32_t*)src, ofst + i + VECSZ/4))), v_src2, v_src3);
 
         v_uint32 v_mul0, v_mul1, v_mul2, v_mul3, v_tmp;
         v_mul0 = vx_load((uint32_t*)m);//AaBbCcDd
@@ -660,7 +592,7 @@ void hlineResizeCn<uint8_t, ufixedpoint16, 2, true, 4>(uint8_t* src, int, int *o
         v_store((uint16_t*)dst, v_srccn);
     }
 #endif
-    if (i < dst_width)
+    for (; i < dst_width; i++)
     {
         *(dst++) = ((ufixedpoint16*)(srccn.w))[0];
         *(dst++) = ((ufixedpoint16*)(srccn.w))[1];
@@ -689,10 +621,12 @@ void hlineResizeCn<uint16_t, ufixedpoint32, 2, true, 1>(uint16_t* src, int, int 
     for (; i <= dst_max - VECSZ; i += VECSZ, m += 2*VECSZ, dst += VECSZ)
     {
         v_uint32 v_src0, v_src1;
-        v_load_indexed_deinterleave(src, ofst + i, v_src0, v_src1);
-        v_uint32 v_mul0, v_mul1;
-        v_load_deinterleave((uint32_t*)m, v_mul0, v_mul1);
-        v_store((uint32_t*)dst, v_src0 * v_mul0 + v_src1 * v_mul1);//abcd
+        v_expand(vx_lut_pairs(src, ofst + i), v_src0, v_src1);
+
+        v_uint64 v_res0 = v_reinterpret_as_u64(v_src0 * vx_load((uint32_t*)m));
+        v_uint64 v_res1 = v_reinterpret_as_u64(v_src1 * vx_load((uint32_t*)m + VECSZ));
+        v_store((uint32_t*)dst, v_pack((v_res0 & vx_setall_u64(0xFFFFFFFF)) + (v_res0 >> 32),
+                                       (v_res1 & vx_setall_u64(0xFFFFFFFF)) + (v_res1 >> 32)));
     }
 #endif
     for (; i < dst_max; i += 1, m += 2)
@@ -2166,6 +2100,249 @@ private:
     int step;
 };
 
+#elif CV_MSA
+
+class ResizeAreaFastVec_SIMD_8u
+{
+public:
+    ResizeAreaFastVec_SIMD_8u(int _cn, int _step)
+        : cn(_cn), step(_step)
+    {
+    }
+
+    int operator() (const uchar* S, uchar* D, int w) const
+    {
+        int dx = 0;
+        const uchar* S0 = S, * S1 = S0 + step;
+
+        v8u16 v_2 = msa_dupq_n_u16(2);
+
+        if( cn == 1 )
+        {
+            for( ; dx <= w - 16; dx += 16, S0 += 32, S1 += 32, D += 16 )
+            {
+                v16u8 v_row[2], row0_lo0, row0_hi0, row1_lo0, row1_hi0, row0_lo1, row0_hi1, row1_lo1, row1_hi1;
+
+                msa_ld2q_u8(S0, &v_row[0], &v_row[1]);
+                ILVRL_B2_UB(v_row[0], msa_dupq_n_u8(0), row0_lo0, row0_hi0);
+                ILVRL_B2_UB(v_row[1], msa_dupq_n_u8(0), row1_lo0, row1_hi0);
+                msa_ld2q_u8(S1, &v_row[0], &v_row[1]);
+                ILVRL_B2_UB(v_row[0], msa_dupq_n_u8(0), row0_lo1, row0_hi1);
+                ILVRL_B2_UB(v_row[1], msa_dupq_n_u8(0), row1_lo1, row1_hi1);
+
+                v8u16 v_dst0 = msa_addq_u16(msa_addq_u16(msa_paddlq_u8(row0_lo0), msa_paddlq_u8(row1_lo0)),
+                                            msa_addq_u16(msa_paddlq_u8(row0_lo1), msa_paddlq_u8(row1_lo1)));
+                v8u16 v_dst1 = msa_addq_u16(msa_addq_u16(msa_paddlq_u8(row0_hi0), msa_paddlq_u8(row1_hi0)),
+                                            msa_addq_u16(msa_paddlq_u8(row0_hi1), msa_paddlq_u8(row1_hi1)));
+                msa_st1q_u8(D, msa_pack_u16(msa_shrq_n_u16(msa_addq_u16(v_dst0, v_2), 2),
+                                            msa_shrq_n_u16(msa_addq_u16(v_dst1, v_2), 2)));
+            }
+        }
+        else if( cn == 4 )
+        {
+            for( ; dx <= w - 8; dx += 8, S0 += 16, S1 += 16, D += 8 )
+            {
+                v16u8 row_lo0, row_hi0, row_lo1, row_hi1;
+                v8u16 row16_lo, row16_hi;
+
+                v16u8 v_row = msa_ld1q_u8(S0);
+                ILVRL_B2_UB(v_row, msa_dupq_n_u8(0), row_lo0, row_hi0);
+
+                v_row = msa_ld1q_u8(S1);
+                ILVRL_B2_UB(v_row, msa_dupq_n_u8(0), row_lo1, row_hi1);
+
+                v8u16 v_row16 = msa_addq_u16(msa_paddlq_u8(row_lo0), msa_paddlq_u8(row_lo1));
+                ILVRL_H2_UH(v_row16, msa_dupq_n_u16(0), row16_lo, row16_hi);
+                v4u32 v_p0 = msa_addq_u32(msa_paddlq_u16(row16_lo), msa_paddlq_u16(row16_hi));
+
+                v_row16 = msa_addq_u16(msa_paddlq_u8(row_hi0), msa_paddlq_u8(row_hi1));
+                ILVRL_H2_UH(v_row16, msa_dupq_n_u16(0), row16_lo, row16_hi);
+                v4u32 v_p1 = msa_addq_u32(msa_paddlq_u16(row16_lo), msa_paddlq_u16(row16_hi));
+
+                v8u16 v_dst = msa_shrq_n_u16(msa_addq_u16(msa_pack_u32(v_p0, v_p1), v_2), 2);
+                msa_st1_u8(D, msa_movn_u16(v_dst));
+            }
+        }
+
+        return dx;
+    }
+
+private:
+    int cn, step;
+};
+
+class ResizeAreaFastVec_SIMD_16u
+{
+public:
+    ResizeAreaFastVec_SIMD_16u(int _cn, int _step)
+        : cn(_cn), step(_step)
+    {
+    }
+
+    int operator() (const ushort * S, ushort * D, int w) const
+    {
+        int dx = 0;
+        const ushort * S0 = S, * S1 = (const ushort *)((const uchar *)(S0) + step);
+
+        v4u32 v_2 = msa_dupq_n_u32(2);
+
+        if( cn == 1 )
+        {
+            for( ; dx <= w - 8; dx += 8, S0 += 16, S1 += 16, D += 8 )
+            {
+                v8u16 v_row[2], row0_lo0, row0_hi0, row1_lo0, row1_hi0, row0_lo1, row0_hi1, row1_lo1, row1_hi1;
+
+                msa_ld2q_u16(S0, &v_row[0], &v_row[1]);
+                ILVRL_H2_UH(v_row[0], msa_dupq_n_u16(0), row0_lo0, row0_hi0);
+                ILVRL_H2_UH(v_row[1], msa_dupq_n_u16(0), row1_lo0, row1_hi0);
+                msa_ld2q_u16(S1, &v_row[0], &v_row[1]);
+                ILVRL_H2_UH(v_row[0], msa_dupq_n_u16(0), row0_lo1, row0_hi1);
+                ILVRL_H2_UH(v_row[1], msa_dupq_n_u16(0), row1_lo1, row1_hi1);
+
+                v4u32 v_dst0 = msa_addq_u32(msa_addq_u32(msa_paddlq_u16(row0_lo0), msa_paddlq_u16(row1_lo0)),
+                                            msa_addq_u32(msa_paddlq_u16(row0_lo1), msa_paddlq_u16(row1_lo1)));
+                v4u32 v_dst1 = msa_addq_u32(msa_addq_u32(msa_paddlq_u16(row0_hi0), msa_paddlq_u16(row1_hi0)),
+                                            msa_addq_u32(msa_paddlq_u16(row0_hi1), msa_paddlq_u16(row1_hi1)));
+                msa_st1q_u16(D, msa_pack_u32(msa_shrq_n_u32(msa_addq_u32(v_dst0, v_2), 2),
+                                             msa_shrq_n_u32(msa_addq_u32(v_dst1, v_2), 2)));
+            }
+        }
+        else if( cn == 4 )
+        {
+            for( ; dx <= w - 4; dx += 4, S0 += 8, S1 += 8, D += 4 )
+            {
+                v8u16 row_lo0, row_hi0, row_lo1, row_hi1;
+
+                v8u16 v_row = msa_ld1q_u16(S0);
+                ILVRL_H2_UH(v_row, msa_dupq_n_u16(0), row_lo0, row_hi0);
+                v_row = msa_ld1q_u16(S1);
+                ILVRL_H2_UH(v_row, msa_dupq_n_u16(0), row_lo1, row_hi1);
+
+                v4u32 v_dst = msa_addq_u32(msa_addq_u32(msa_paddlq_u16(row_lo0), msa_paddlq_u16(row_hi0)),
+                                           msa_addq_u32(msa_paddlq_u16(row_lo1), msa_paddlq_u16(row_hi1)));
+                msa_st1_u16(D, msa_movn_u32(msa_shrq_n_u32(msa_addq_u32(v_dst, v_2), 2)));
+            }
+        }
+
+        return dx;
+    }
+
+private:
+    int cn, step;
+};
+
+class ResizeAreaFastVec_SIMD_16s
+{
+public:
+    ResizeAreaFastVec_SIMD_16s(int _cn, int _step)
+        : cn(_cn), step(_step)
+    {
+    }
+
+    int operator() (const short * S, short * D, int w) const
+    {
+        int dx = 0;
+        const short * S0 = S, * S1 = (const short *)((const uchar *)(S0) + step);
+
+        v4i32 v_2 = msa_dupq_n_s32(2);
+
+        if( cn == 1 )
+        {
+            for( ; dx <= w - 8; dx += 8, S0 += 16, S1 += 16, D += 8 )
+            {
+                v8i16 v_row[2], row0_lo0, row0_hi0, row1_lo0, row1_hi0, row0_lo1, row0_hi1, row1_lo1, row1_hi1;
+
+                msa_ld2q_s16(S0, &v_row[0], &v_row[1]);
+                ILVRL_H2_SH(v_row[0], msa_dupq_n_s16(0), row0_lo0, row0_hi0);
+                ILVRL_H2_SH(v_row[1], msa_dupq_n_s16(0), row1_lo0, row1_hi0);
+                msa_ld2q_s16(S1, &v_row[0], &v_row[1]);
+                ILVRL_H2_SH(v_row[0], msa_dupq_n_s16(0), row0_lo1, row0_hi1);
+                ILVRL_H2_SH(v_row[1], msa_dupq_n_s16(0), row1_lo1, row1_hi1);
+
+                v4i32 v_dst0 = msa_addq_s32(msa_addq_s32(msa_paddlq_s16(row0_lo0), msa_paddlq_s16(row1_lo0)),
+                                            msa_addq_s32(msa_paddlq_s16(row0_lo1), msa_paddlq_s16(row1_lo1)));
+                v4i32 v_dst1 = msa_addq_s32(msa_addq_s32(msa_paddlq_s16(row0_hi0), msa_paddlq_s16(row1_hi0)),
+                                            msa_addq_s32(msa_paddlq_s16(row0_hi1), msa_paddlq_s16(row1_hi1)));
+                msa_st1q_s16(D, msa_pack_s32(msa_shrq_n_s32(msa_addq_s32(v_dst0, v_2), 2),
+                                             msa_shrq_n_s32(msa_addq_s32(v_dst1, v_2), 2)));
+            }
+        }
+        else if( cn == 4 )
+        {
+            for( ; dx <= w - 4; dx += 4, S0 += 8, S1 += 8, D += 4 )
+            {
+                v8i16 row_lo0, row_hi0, row_lo1, row_hi1;
+
+                v8i16 v_row = msa_ld1q_s16(S0);
+                ILVRL_H2_SH(v_row, msa_dupq_n_s16(0), row_lo0, row_hi0);
+                v_row = msa_ld1q_s16(S1);
+                ILVRL_H2_SH(v_row, msa_dupq_n_s16(0), row_lo1, row_hi1);
+
+                v4i32 v_dst = msa_addq_s32(msa_addq_s32(msa_paddlq_s16(row_lo0), msa_paddlq_s16(row_hi0)),
+                                           msa_addq_s32(msa_paddlq_s16(row_lo1), msa_paddlq_s16(row_hi1)));
+                msa_st1_s16(D, msa_movn_s32(msa_shrq_n_s32(msa_addq_s32(v_dst, v_2), 2)));
+            }
+        }
+
+        return dx;
+    }
+
+private:
+    int cn, step;
+};
+
+struct ResizeAreaFastVec_SIMD_32f
+{
+    ResizeAreaFastVec_SIMD_32f(int _scale_x, int _scale_y, int _cn, int _step)
+        : cn(_cn), step(_step)
+    {
+        fast_mode = _scale_x == 2 && _scale_y == 2 && (cn == 1 || cn == 4);
+    }
+
+    int operator() (const float * S, float * D, int w) const
+    {
+        if (!fast_mode)
+            return 0;
+
+        const float * S0 = S, * S1 = (const float *)((const uchar *)(S0) + step);
+        int dx = 0;
+
+        v4f32 v_025 = msa_dupq_n_f32(0.25f);
+
+        if( cn == 1 )
+        {
+            for( ; dx <= w - 4; dx += 4, S0 += 8, S1 += 8, D += 4 )
+            {
+                v4f32 v_row[2];
+
+                msa_ld2q_f32(S0, &v_row[0], &v_row[1]);
+                v4f32 v_dst0 = msa_addq_f32(v_row[0], v_row[1]);
+                msa_ld2q_f32(S1, &v_row[0], &v_row[1]);
+                v4f32 v_dst1 = msa_addq_f32(v_row[0], v_row[1]);
+
+                msa_st1q_f32(D, msa_mulq_f32(msa_addq_f32(v_dst0, v_dst1), v_025));
+            }
+        }
+        else if( cn == 4 )
+        {
+            for( ; dx <= w - 4; dx += 4, S0 += 8, S1 += 8, D += 4 )
+            {
+                v4f32 v_dst0 = msa_addq_f32(msa_ld1q_f32(S0), msa_ld1q_f32(S0 + 4));
+                v4f32 v_dst1 = msa_addq_f32(msa_ld1q_f32(S1), msa_ld1q_f32(S1 + 4));
+
+                msa_st1q_f32(D, msa_mulq_f32(msa_addq_f32(v_dst0, v_dst1), v_025));
+            }
+        }
+
+        return dx;
+    }
+
+private:
+    int cn;
+    bool fast_mode;
+    int step;
+};
+
 #elif CV_SIMD
 
 class ResizeAreaFastVec_SIMD_8u
@@ -2214,6 +2391,7 @@ public:
                 v_zip(t0, t3, s0, s1); v_zip(t1, t4, s2, s3); v_zip(t2, t5, s4, s5);
                 bl = s0 + s3; gl = s1 + s4; rl = s2 + s5;
 #elif CV_SIMD_WIDTH == 64
+                v_zip(t0, t3, s0, s1); v_zip(t1, t4, s2, s3); v_zip(t2, t5, s4, s5);
                 v_zip(s0, s3, t0, t1); v_zip(s1, s4, t2, t3); v_zip(s2, s5, t4, t5);
                 bl = t0 + t3; gl = t1 + t4; rl = t2 + t5;
 #endif
@@ -2233,6 +2411,7 @@ public:
                 v_zip(t0, t3, s0, s1); v_zip(t1, t4, s2, s3); v_zip(t2, t5, s4, s5);
                 bh = s0 + s3; gh = s1 + s4; rh = s2 + s5;
 #elif CV_SIMD_WIDTH == 64
+                v_zip(t0, t3, s0, s1); v_zip(t1, t4, s2, s3); v_zip(t2, t5, s4, s5);
                 v_zip(s0, s3, t0, t1); v_zip(s1, s4, t2, t3); v_zip(s2, s5, t4, t5);
                 bh = t0 + t3; gh = t1 + t4; rh = t2 + t5;
 #endif
@@ -3782,9 +3961,9 @@ void cv::resize( InputArray _src, OutputArray _dst, Size dsize,
     Size ssize = _src.size();
 
     CV_Assert( !ssize.empty() );
-    CV_Assert( !dsize.empty() || (inv_scale_x > 0 && inv_scale_y > 0) );
     if( dsize.empty() )
     {
+        CV_Assert(inv_scale_x > 0); CV_Assert(inv_scale_y > 0);
         dsize = Size(saturate_cast<int>(ssize.width*inv_scale_x),
                      saturate_cast<int>(ssize.height*inv_scale_y));
         CV_Assert( !dsize.empty() );
@@ -3793,6 +3972,7 @@ void cv::resize( InputArray _src, OutputArray _dst, Size dsize,
     {
         inv_scale_x = (double)dsize.width/ssize.width;
         inv_scale_y = (double)dsize.height/ssize.height;
+        CV_Assert(inv_scale_x > 0); CV_Assert(inv_scale_y > 0);
     }
 
     if (interpolation == INTER_LINEAR_EXACT && (_src.depth() == CV_32F || _src.depth() == CV_64F))

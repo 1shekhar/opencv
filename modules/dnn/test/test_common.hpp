@@ -47,7 +47,7 @@
 #endif
 
 namespace cv { namespace dnn {
-CV__DNN_EXPERIMENTAL_NS_BEGIN
+CV__DNN_INLINE_NS_BEGIN
 static inline void PrintTo(const cv::dnn::Backend& v, std::ostream* os)
 {
     switch (v) {
@@ -55,6 +55,7 @@ static inline void PrintTo(const cv::dnn::Backend& v, std::ostream* os)
     case DNN_BACKEND_HALIDE: *os << "HALIDE"; return;
     case DNN_BACKEND_INFERENCE_ENGINE: *os << "DLIE"; return;
     case DNN_BACKEND_OPENCV: *os << "OCV"; return;
+    case DNN_BACKEND_VKCOM: *os << "VKCOM"; return;
     } // don't use "default:" to emit compiler warnings
     *os << "DNN_BACKEND_UNKNOWN(" << (int)v << ")";
 }
@@ -66,6 +67,7 @@ static inline void PrintTo(const cv::dnn::Target& v, std::ostream* os)
     case DNN_TARGET_OPENCL: *os << "OCL"; return;
     case DNN_TARGET_OPENCL_FP16: *os << "OCL_FP16"; return;
     case DNN_TARGET_MYRIAD: *os << "MYRIAD"; return;
+    case DNN_TARGET_VULKAN: *os << "VULKAN"; return;
     } // don't use "default:" to emit compiler warnings
     *os << "DNN_TARGET_UNKNOWN(" << (int)v << ")";
 }
@@ -79,7 +81,7 @@ static inline void PrintTo(const tuple<cv::dnn::Backend, cv::dnn::Target> v, std
     PrintTo(get<1>(v), os);
 }
 
-CV__DNN_EXPERIMENTAL_NS_END
+CV__DNN_INLINE_NS_END
 }} // namespace
 
 
@@ -239,7 +241,8 @@ static inline
 testing::internal::ParamGenerator<tuple<Backend, Target> > dnnBackendsAndTargets(
         bool withInferenceEngine = true,
         bool withHalide = false,
-        bool withCpuOCV = true
+        bool withCpuOCV = true,
+        bool withVkCom = true
 )
 {
     std::vector<tuple<Backend, Target> > targets;
@@ -276,6 +279,10 @@ testing::internal::ParamGenerator<tuple<Backend, Target> > dnnBackendsAndTargets
         targets.push_back(make_tuple(DNN_BACKEND_OPENCV, DNN_TARGET_OPENCL));
         targets.push_back(make_tuple(DNN_BACKEND_OPENCV, DNN_TARGET_OPENCL_FP16));
     }
+#endif
+#ifdef HAVE_VULKAN
+    if (withVkCom)
+        targets.push_back(make_tuple(DNN_BACKEND_VKCOM, DNN_TARGET_VULKAN));
 #endif
     if (targets.empty())  // validate at least CPU mode
         targets.push_back(make_tuple(DNN_BACKEND_OPENCV, DNN_TARGET_CPU));

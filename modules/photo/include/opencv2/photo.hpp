@@ -61,6 +61,12 @@ camera calibration with multiple exposures and exposure fusion.
 @}
   */
 
+enum InpaintingModes
+{
+    CV_INPAINT_NS      =0,
+    CV_INPAINT_TELEA   =1
+};
+
 namespace cv
 {
 
@@ -868,9 +874,5 @@ CV_EXPORTS_W void stylization(InputArray src, OutputArray dst, float sigma_s = 6
 //! @} photo
 
 } // cv
-
-#ifndef DISABLE_OPENCV_24_COMPATIBILITY
-#include "opencv2/photo/photo_c.h"
-#endif
 
 #endif
